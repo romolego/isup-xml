@@ -348,7 +348,7 @@ const lightFor = d => Math.min(L_CEIL, L_BASE + STEP_L*Math.max(0,d));
 const defaultView={
   showRU:true, showEN:true, showL:false, showType:false, showReq:false, colorLevels:true,
   copyRU:true, copyPath:false, copyEN:true,
-  rowFilterDisplay:true, rowFilterExpand:false
+  rowFilterDisplay:true, rowFilterExpand:true
 };
 
 /* ===================== Состояние ===================== */
@@ -418,6 +418,15 @@ const els={
   serviceCfgCancel:q('#serviceCfgCancel'), serviceCfgApply:q('#serviceCfgApply'),
   fltMenu:q('#fltMenu')
 };
+/* === обработчики закрытия меню фильтров: клик-вне и Esc === */
+function onDocDown(e){
+  if (!e.target.closest('#fltMenu') && !e.target.closest('.fbtn')) {
+    hideFilterMenu();
+  }
+}
+function onEsc(e){
+  if (e.key === 'Escape') hideFilterMenu();
+}
 
 /* Кнопка разбора активна при наличии файлов */
 function syncParseBtnState(){
@@ -1337,13 +1346,18 @@ function openFilterMenu(btn, node, kind, code, blocked=false){
   menu.style.left = Math.min(r.left, window.innerWidth - 360) + 'px';
   menu.style.top  = (r.bottom + 6) + 'px';
   menu.style.display='block';
-  document.addEventListener('click', handleOutsideMenuClick, {once:true});
+  setTimeout(() => {
+  document.addEventListener('mousedown', onDocDown, true);
+  document.addEventListener('keydown', onEsc, true);
+}, 0);
 }
-function hideFilterMenu(){ els.fltMenu.style.display='none'; fltMenuState.open=false; }
-function handleOutsideMenuClick(e){
-  if(e.target.closest('#fltMenu') || e.target.closest('.fbtn')){ if(e.target.closest('.fbtn')) return; }
-  hideFilterMenu();
+function hideFilterMenu(){
+  els.fltMenu.style.display='none';
+  fltMenuState.open=false;
+  document.removeEventListener('mousedown', onDocDown, true);
+  document.removeEventListener('keydown', onEsc, true);
 }
+
 function mi(text, fn, disabled=false){
   const d=ce('div','mi',text);
   if(disabled){ d.setAttribute('aria-disabled','true'); }
