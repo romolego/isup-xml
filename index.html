@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>XSD Viewer — точное отображение, стабильная прокрутка</title>
+<title>XSD Viewer — актуальная рабочая версия</title>
 <style>
   :root{
     --bg:#ffffff; --fg:#0f1720; --muted:#5a6a7a; --line:#e6e9ee;
@@ -51,7 +51,6 @@
   label:has(input:checked){ color:#0f1720; font-weight:600; }
 
   .cb-inline{display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
-
   .sep{ color:#9aa6b2; opacity:.9; user-select:none; }
 
   .count-badge{
@@ -187,7 +186,7 @@
           <span class="sep">|</span>
           <span class="hint">Кнопки фильтрации:</span>
           <label class="cb-inline"><input type="checkbox" data-view="rowFilterDisplay" checked> Отображение</label>
-          <label class="cb-inline"><input type="checkbox" data-view="rowFilterExpand" checked> Разворачивание</label>
+          <label class="cb-inline"><input type="checkbox" data-view="rowFilterExpand"> Разворачивание</label>
         </div>
       </div>
     </div>
@@ -232,9 +231,9 @@
   <div class="tree-controls">
     <label class="cb-inline">Уровень раскрытия:
       <select class="mono" id="autoDepth">
-        <option>1</option><option>2</option><option>3</option><option selected>4</option>
+        <option>1</option><option>2</option><option>3</option><option>4</option>
         <option>5</option><option>6</option><option>7</option><option>8</option>
-        <option>9</option><option>10</option><option value="all">Все</option>
+        <option>9</option><option>10</option><option value="all" selected>Все</option>
       </select>
     </label>
   </div>
@@ -349,22 +348,22 @@ const lightFor = d => Math.min(L_CEIL, L_BASE + STEP_L*Math.max(0,d));
 const defaultView={
   showRU:true, showEN:true, showL:false, showType:false, showReq:false, colorLevels:true,
   copyRU:true, copyPath:false, copyEN:true,
-  rowFilterDisplay:true, rowFilterExpand:true
+  rowFilterDisplay:true, rowFilterExpand:false
 };
 
 /* ===================== Состояние ===================== */
 const state={
   view: loadJSON(LS_VIEW, defaultView),
-  filtersService: loadJSON(LS_FILTER_SERVICE, null),
-  filtersTypical: loadJSON(LS_FILTER_TYPICAL, null),
-  expandLevel: (localStorage.getItem(LS_LEVEL) || '4'),
+  filtersService: loadJSON(LS_FILTER_SERVICE, {}),     // пусто по умолчанию
+  filtersTypical: loadJSON(LS_FILTER_TYPICAL, {}),     // пусто по умолчанию
+  expandLevel: (localStorage.getItem(LS_LEVEL) || 'all'),
   expanded: new Set(loadJSON(LS_EXP, [])),
   focusedIndex: 0,
   modelRoot: null,
   repo: null,
   slice: loadJSON(LS_SLICE, {method:'none', anchorQName:'', anchorPath:''}),
-  typicalCodes: loadTypicalCodes(),
-  serviceAllCodes: loadServiceAllCodes(),
+  typicalCodes: loadTypicalCodes(),                    // []
+  serviceAllCodes: loadServiceAllCodes(),              // []
   filterOverrides: new Set(loadJSON(LS_OVERRIDES, [])),
   treeCompact: (localStorage.getItem(LS_TREE_COMPACT)==='true')
 };
@@ -374,46 +373,21 @@ const buildDiagnostics = { missingTypes: [], missingElements: [] , idXmlCount:0,
 /* ===================== Код-листы ===================== */
 function loadTypicalCodes(){
   const raw = localStorage.getItem(LS_TYPICAL_CFG);
-  if(!raw) return ['fio','address','org','contact','signers','basis','docRef','idBusiness','dateTime'];
-  try{ const arr=JSON.parse(raw); return Array.isArray(arr)&&arr.length? arr : ['fio','address']; }catch(_){ return ['fio','address']; }
+  if(!raw) return [];
+  try{ const arr=JSON.parse(raw); return Array.isArray(arr)? arr.filter(Boolean):[]; }catch(_){ return []; }
 }
 function saveTypicalCodes(arr){ localStorage.setItem(LS_TYPICAL_CFG, JSON.stringify(arr)); }
 
-const DEFAULT_SERVICE_BASE=['wrapper','annotation','documentation','signature','keyInfo','idXml','guid','schemaVersion','object'];
 function loadServiceAllCodes(){
   const raw = localStorage.getItem(LS_SERVICE_ALL);
-  if(!raw){
-    localStorage.setItem(LS_SERVICE_ALL, JSON.stringify(DEFAULT_SERVICE_BASE));
-    return [...DEFAULT_SERVICE_BASE];
-  }
-  try{ const arr=JSON.parse(raw); return Array.isArray(arr)? arr.filter(Boolean) : [...DEFAULT_SERVICE_BASE]; }catch(_){ return [...DEFAULT_SERVICE_BASE]; }
+  if(!raw) return [];
+  try{ const arr=JSON.parse(raw); return Array.isArray(arr)? arr.filter(Boolean):[]; }catch(_){ return []; }
 }
 function saveServiceAllCodes(arr){
   const uniq = Array.from(new Set(arr.map(s=>String(s).trim()).filter(Boolean)));
   localStorage.setItem(LS_SERVICE_ALL, JSON.stringify(uniq));
   state.serviceAllCodes = uniq;
 }
-
-/* Миграция старого filters */
-(function migrateOldFilterIfAny(){
-  const old = loadJSON('xsdv:filters', null);
-  if(old && (!state.filtersService || !state.filtersTypical)){
-    state.filtersService = {...old};
-    state.filtersTypical = {...old};
-    localStorage.setItem(LS_FILTER_SERVICE, JSON.stringify(state.filtersService));
-    localStorage.setItem(LS_FILTER_TYPICAL, JSON.stringify(state.filtersTypical));
-    localStorage.removeItem('xsdv:filters');
-  }
-})();
-if(!state.filtersService){
-  state.filtersService = Object.fromEntries(getServiceListInit().map(k=>[k,true]));
-  localStorage.setItem(LS_FILTER_SERVICE, JSON.stringify(state.filtersService));
-}
-if(!state.filtersTypical){
-  state.filtersTypical = Object.fromEntries(getTypicalList().map(k=>[k,true]));
-  localStorage.setItem(LS_FILTER_TYPICAL, JSON.stringify(state.filtersTypical));
-}
-function getServiceListInit(){ const full = loadServiceAllCodes(); return full.length ? full : DEFAULT_SERVICE_BASE; }
 
 /* ===================== DOM ===================== */
 const els={
@@ -539,8 +513,11 @@ async function parseFiles(){
     annotateRequiredness(rootNode);
 
     state.modelRoot = rootNode;
+
+    /* Полное раскрытие по умолчанию */
     state.expanded.clear();
     state.expanded.add(state.modelRoot._id);
+    state.expandLevel = localStorage.getItem(LS_LEVEL) || 'all';
     autoExpandToLevel();
 
     refreshStatsFromRepo(repo, rootNode);
@@ -916,7 +893,7 @@ function filterService(node, FS, isRoot=false){
   return dfs(node, isRoot);
 }
 
-/* ВАЖНО: разворачивание — считать группой либо *_grp, либо точное совпадение nameEN с кодом */
+/* Разворачивание групп */
 function applyTypicalGroupExpand(node, FT, FS){
   const keys = getTypicalList();
   const isGrpByFlag = keys.some(k=> node[k+'_grp']);
@@ -958,7 +935,8 @@ function sliceToActInfo(rootOrig){
 /* ===================== Вспомогательные модели ===================== */
 function deepClone(n){ return {...n, children:(n.children||[]).map(deepClone)} }
 function walkLocal(n, fn, d=1){ fn(n,d); (n.children||[]).forEach(ch=>walkLocal(ch,fn,d+1)); }
-function walk(n,fn){ if(!n) return; fn(n); (n.children||[]).forEach(ch=>walk(ch,fn)); }
+function walk(n,fn){ if(!n) return; fn(n); (n.children||[]).forEach(ch=>walk(ch,fn)); }  /* исправлено */
+
 function annotateIdsPathsAndBranch(node){
   node._id = node.nameEN||'root';
   node._pathEN = node.nameEN||'root';
@@ -1085,7 +1063,7 @@ function renderModel(){
     const showExp  = !!state.view.rowFilterExpand;
 
     const codeSvc = (node.nameEN||'').trim();
-    const codeTyp = pickTypicalCodeForNode(node); // теперь всегда есть: *_grp или nameEN
+    const codeTyp = pickTypicalCodeForNode(node); // *_grp или nameEN
 
     if(showDisp){
       const svcInList = codeSvc && getServiceList().some(c=> normalize(c)===normalize(codeSvc));
@@ -1131,6 +1109,18 @@ function renderModel(){
 
     const expandedNow = state.expanded.has(node._id);
     if(expandedNow && (node.children||[]).length){ node.children.forEach(ch=>renderNode(ch)); }
+
+    /* события на caret/dot */
+    caret.addEventListener('click', ()=>{
+      if((node.children||[]).length || node._filteredCollapse){
+        withPreservedScroll(()=>{
+          if(state.expanded.has(node._id)) state.expanded.delete(node._id); else state.expanded.add(node._id);
+          saveState();
+          renderModel();
+        }, node._id);
+      }
+    });
+    dot.addEventListener('click', ()=> openCardAtRow(row, node));
   }
 
   renderNode(model);
@@ -1147,7 +1137,6 @@ function renderModel(){
 
 function pickTypicalCodeForNode(n){
   for(const k of getTypicalList()){ if(n[k+'_grp']) return k; }
-  // Фолбэк: если не помечена группой — используем точный код узла
   return (n.nameEN||'').trim();
 }
 
@@ -1181,17 +1170,6 @@ els.tree.addEventListener('click', (e)=>{
   const row=e.target.closest('.row'); if(!row) return;
   const id=row.dataset.id; const node=getByIdFull(id);
 
-  if(e.target.classList.contains('caret')){
-    if((node.children||[]).length || node._filteredCollapse){
-      withPreservedScroll(()=>{
-        if(state.expanded.has(id)) state.expanded.delete(id); else state.expanded.add(id);
-        saveState();
-        renderModel();
-      }, id);
-    }
-    return;
-  }
-  if(e.target.classList.contains('dot')){ openCardAtRow(row, node); return; }
   if(e.ctrlKey && (node.children||[]).length){
     withPreservedScroll(()=>{
       expandAllRecursive(node); saveState(); renderModel();
@@ -1286,7 +1264,6 @@ function highlightType(tp){
 /* ========= Контекстное меню фильтра-кнопок ========= */
 let fltMenuState = { open:false, kind:null, code:'', anchor: null, nodeId:null };
 function openFilterMenu(btn, node, kind, code, blocked=false){
-  // Код для «разворачивания»: если пуст — используем nameEN
   if(kind==='typical' && (!code || !code.trim())) code = (node.nameEN||'').trim();
   if(!code){ showToast('Нет кода для операции'); return; }
   fltMenuState = { open:true, kind, code, anchor:btn, nodeId: node._id };
@@ -1725,7 +1702,10 @@ function computeServiceCountsDetail(){
   if(!state.modelRoot) return detail;
   walk(state.modelRoot, n=>{
     keys.forEach(k=>{
-      if(nodeMatchesServiceCode(n,k)){ detail[k].groups++; detail[k].rows++; }
+      if(nodeMatchesServiceCode(n,k)){
+        detail[k].groups++;
+        detail[k].rows += countDescendants(n);
+      }
     });
   });
   return detail;
@@ -1895,6 +1875,9 @@ function countDescendants(n){
 applyTreeCompact();
 restoreViewCheckboxes();
 rebuildAfterConfigChange();
+
+/* Подстановка «Все» в селектор уровня при первом запуске */
+elsAutoDepth.value = state.expandLevel || 'all';
 
 function restoreViewCheckboxes(){
   document.querySelectorAll('[data-view]').forEach(x=>{
