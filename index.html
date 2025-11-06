@@ -113,7 +113,7 @@
   .fbtn.blocked{background:#fff3f3; border-color:#ffd6d6; color:#9a2b2b; text-decoration:line-through; cursor:not-allowed}
   .fbtn:active{transform:translateY(1px)}
 
-  .flt-menu{position:fixed; z-index:1200; background:#ffffff; border:1px solid #e6e9ee; border-radius:10px; box-shadow:var(--shadow); display:none; min-width:240px; max-width:360px}
+  .flt-menu{position:absolute; z-index:1200; background:#ffffff; border:1px solid #e6e9ee; border-radius:10px; box-shadow:var(--shadow); display:none; min-width:240px; max-width:360px}
   .flt-menu .mi{padding:8px 10px; font-size:13px; cursor:pointer; border-top:1px solid #f2f5f9}
   .flt-menu .mi:first-child{border-top:none}
   .flt-menu .mi:hover{background:#f6faf8}
@@ -251,6 +251,8 @@
   <div class="line" style="margin-top:12px"></div>
   <div class="settings-row" id="exportSection" style="margin:8px 0; flex-wrap:wrap; gap:8px">
     <button class="btn" data-dl="txt">Экспорт TXT</button>
+<button class="btn" data-dl="csv">Экспорт Excel (CSV)</button>
+
     <button class="btn" data-dl="snap-save">Сохранить snapshot</button>
     <button class="btn" data-dl="snap-load">Загрузить snapshot</button>
     <button class="btn" data-dl="settings-export">Сохранить настройки</button>
@@ -418,6 +420,24 @@ const els={
   serviceCfgCancel:q('#serviceCfgCancel'), serviceCfgApply:q('#serviceCfgApply'),
   fltMenu:q('#fltMenu')
 };
+let _menuScroller = null;
+let _onScrollReposition = null;
+
+function _addMenuRepositioners(handler){
+  window.addEventListener('scroll', handler, { passive:true });
+  window.addEventListener('resize', handler);
+  _menuScroller = fltMenuState.anchor?.closest('#treeWrap') || null;
+  if (_menuScroller) _menuScroller.addEventListener('scroll', handler, { passive:true });
+}
+
+function _removeMenuRepositioners(handler){
+  window.removeEventListener('scroll', handler);
+  window.removeEventListener('resize', handler);
+  if (_menuScroller){ _menuScroller.removeEventListener('scroll', handler); _menuScroller = null; }
+}
+
+
+
 /* === обработчики закрытия меню фильтров: клик-вне и Esc === */
 function onDocDown(e){
   if (!e.target.closest('#fltMenu') && !e.target.closest('.fbtn')) {
@@ -457,6 +477,7 @@ document.addEventListener('click',(e)=>{
   const dl = e.target.getAttribute('data-dl');
   if(all){ toggleBlock(all,true); renderModel(); }
   if(none){ toggleBlock(none,false); renderModel(); }
+  if (dl === 'csv') { exportCsvCurrentTree(); return; }
   if(dl) handleDownloadAction(dl);
 });
 function toggleBlock(block, val){
@@ -1342,21 +1363,48 @@ function openFilterMenu(btn, node, kind, code, blocked=false){
     }
   }
 
-  const r = btn.getBoundingClientRect();
-  menu.style.left = Math.min(r.left, window.innerWidth - 360) + 'px';
-  menu.style.top  = (r.bottom + 6) + 'px';
-  menu.style.display='block';
-  setTimeout(() => {
+
+// закрыть прежнее меню, если оно было открыто
+if (fltMenuState.open) hideFilterMenu();
+
+// показать текущее меню и вычислить позицию относительно кнопки
+menu.style.display = 'block';
+
+function positionMenu(){
+  const anchor = fltMenuState.anchor;
+  if (!anchor || !document.contains(anchor)){ hideFilterMenu(); return; }
+  const r = anchor.getBoundingClientRect();
+  const maxLeft = window.innerWidth - 360;
+  const x = window.scrollX + Math.min(Math.max(0, r.left), Math.max(0, maxLeft));
+  const y = window.scrollY + r.bottom + 6;
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
+}
+
+positionMenu();
+_onScrollReposition = () => positionMenu();
+_addMenuRepositioners(_onScrollReposition);
+
+setTimeout(() => {
   document.addEventListener('mousedown', onDocDown, true);
   document.addEventListener('keydown', onEsc, true);
 }, 0);
+
+
+
+
 }
 function hideFilterMenu(){
   els.fltMenu.style.display='none';
   fltMenuState.open=false;
   document.removeEventListener('mousedown', onDocDown, true);
   document.removeEventListener('keydown', onEsc, true);
+  if (_onScrollReposition){
+    _removeMenuRepositioners(_onScrollReposition);
+    _onScrollReposition = null;
+  }
 }
+
 
 function mi(text, fn, disabled=false){
   const d=ce('div','mi',text);
@@ -1907,6 +1955,106 @@ function rebuildAfterConfigChange(){
   }
   renderModel();
 }
+
+
+
+
+// Экспорт текущего видимого дерева в CSV (UTF-8+BOM, sep=;, CRLF)
+function exportCsvCurrentTree(){
+  const model = filteredTree(); // учтены фильтры, onlySignable, текущее раскрытие
+  if(!model){
+    if (typeof showToast === 'function') showToast('Нет данных для экспорта');
+    return;
+  }
+  const csvBody = generateCSV_FromView(model);     // тело CSV
+  const content = 'sep=;\r\n' + csvBody;           // подсказка Excel о разделителе
+  const bom = '\uFEFF';                            // UTF-8 BOM
+  const blob = new Blob([bom, content], { type:'text/csv;charset=utf-8' });
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'xsd_tree.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// Генерация CSV с добавленным столбцом "Код"
+function generateCSV_FromView(root){
+  if(!root) return '';
+
+  // Фиксированный порядок и состав колонок
+const cols = [
+  { key: 'num',        title: '№' },
+  { key: 'ru',         title: 'Наименование', indent: true },
+  { key: 'en',         title: 'Код' },
+  { key: 'type',       title: 'Тип' },
+  { key: 'req',        title: 'Обязательность' },
+  { key: 'desc',       title: 'Описание' },
+  { key: 'editCond',   title: 'Условия доступности редактирования' },
+  { key: 'comment',    title: 'Комментарий' }
+];
+
+  const sep  = ';';
+  const q    = s => `"${String(s||'').replace(/"/g,'""')}"`;
+  const NBSP = '\u00A0';
+  const PAD  = NBSP + NBSP;
+
+  // Счётчики для иерархической нумерации
+  const counters = [];
+  function nextNumber(level){
+    if (level === 0) return '0';           // верхний уровень всегда "0"
+    const l = level - 1;                   // глубины ниже — обычная нумерация
+    counters.length = l + 1;
+    counters[l] = (counters[l] || 0) + 1;
+    for (let i = l + 1; i < counters.length; i++) counters[i] = 0;
+    return counters.slice(0, l + 1).join('.') + '.';
+  }
+
+  // Заголовок
+  const header = cols.map(c => q(c.title)).join(sep);
+  const lines = [header];
+
+  // Обход видимого дерева
+  walk(root, node => {
+    const lvl = node.level ?? 0;
+    const num = nextNumber(lvl);
+    const indent = PAD.repeat(lvl);
+
+    const ru   = node.nameRU || node.nameEN || '';
+    const en   = node.nameEN || '';
+    const type = node.type || '';
+    const desc = (typeof node.description === 'string' && node.description) || '';
+    const edit = node.editCond || '';
+    const comm = node.comment || '';
+
+const row = cols.map(c => {
+  if (c.key === 'num')      return q(num);
+  if (c.key === 'ru')       return q(indent + ru);
+  if (c.key === 'en')       return q(en);
+  if (c.key === 'type')     return q(type);
+  if (c.key === 'req') {
+    const reqTxt = node.req === 'required'   ? 'обяз.' :
+                   node.req === 'conditional'? 'условно' : 'необяз.';
+    return q(reqTxt);
+  }
+  if (c.key === 'desc')     return q(desc);
+  if (c.key === 'editCond') return q(edit);
+  if (c.key === 'comment')  return q(comm);
+  return '""';
+});
+
+    lines.push(row.join(sep));
+  });
+
+  return lines.join('\r\n'); // CRLF для Excel
+}
+
+
+
+
 </script>
 </body>
 </html>
