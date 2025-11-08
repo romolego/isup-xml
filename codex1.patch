@@ -1,0 +1,1046 @@
+diff --git a/index.html b/index.html
+index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac033c0e9b 100644
+--- a/index.html
++++ b/index.html
+@@ -117,51 +117,52 @@
+   .flt-menu .mi{padding:8px 10px; font-size:13px; cursor:pointer; border-top:1px solid #f2f5f9}
+   .flt-menu .mi:first-child{border-top:none}
+   .flt-menu .mi:hover{background:#f6faf8}
+   .flt-menu .mi[aria-disabled="true"]{color:#95a3b1; cursor:not-allowed; background:#fff}
+ 
+   .row[aria-selected="true"]{outline:2px solid #96e1c5; outline-offset:-2px; background:#f3fbf7}
+ 
+   .card{position:fixed; z-index:1000; min-width:340px; max-width:520px; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:10px 12px; display:none}
+   .card h4{margin:0 0 8px; font-size:14px}
+   .kv{display:grid; grid-template-columns:140px 1fr; gap:6px 10px; font-size:13px}
+   .kv .k{color:#5a6775}
+   .kv .v code{font-family:var(--mono)}
+   .card .actions{display:flex; gap:6px; margin-top:8px}
+   .card .type-link{color:#0b4f3b; text-decoration:underline; cursor:pointer}
+   .card::after{content:""; position:absolute; width:10px; height:10px; background:#fff; transform:rotate(45deg); border-left:1px solid var(--line); border-top:1px solid var(--line)}
+ 
+   .toast{position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:#0f1f17; color:#e9fff6; border-radius:10px; padding:10px 12px; box-shadow:var(--shadow); display:none; z-index:1300}
+ 
+   dialog{border:none; border-radius:12px; padding:16px; box-shadow:var(--shadow); max-width:980px}
+   dialog::backdrop{background:rgba(0,0,0,.2)}
+   dialog table{border-collapse:collapse; width:100%; font-size:13px; margin-bottom:10px}
+   dialog th, dialog td{border:1px solid #e6e9ee; padding:6px 8px; text-align:left; vertical-align:top}
+   dialog th{background:#f7f9fc; font-weight:600}
+   dialog .dlg-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:12px}
+ 
+-  .sign-slice{ margin:14px 0; padding:10px 12px; border:1px solid #e6e9ee; border-radius:10px; background:#ffffff; }
++  .sign-slice{ display:flex; align-items:center; gap:12px; margin:14px 0; padding:10px 12px; border:1px solid #e6e9ee; border-radius:10px; background:#ffffff; flex-wrap:wrap; }
++  .sign-slice input[type="text"]{ flex:0 0 220px; max-width:100%; padding:6px 8px; border:1px solid #cfd6df; border-radius:6px; font:13px/1.35 var(--mono); color:#203040; background:#f9fbff; }
+ 
+   #block-view{margin-bottom:12px;}
+ </style>
+ </head>
+ <body>
+ <div class="container">
+ 
+   <div class="loader">
+     <input class="file" type="file" id="fileInput" accept=".xsd,.xml" multiple/>
+     <button class="btn primary" id="parseBtn" disabled>Загрузить и разобрать XSD</button>
+   </div>
+ 
+   <div class="status" id="statusBar">
+     <span class="badge" id="filesBadge">Файлов: 0</span>
+     <span class="badge" id="globalsBadge">Глоб. элементов: 0</span>
+     <span class="badge" id="typesBadge">Типов: 0</span>
+     <span class="badge" id="maxDepthBadge">Максимальная глубина: 0</span>
+     <span class="badge" id="rowsBadge">Строк всего: 0</span>
+     <button class="btn" id="reportBtn">Отчёт</button>
+     <div class="progress-wrap" id="progressWrap"><div class="progress"></div></div>
+   </div>
+ 
+   <details open id="block-view">
+     <summary>Настройки отображения</summary>
+     <div class="block-actions">
+@@ -203,51 +204,52 @@
+           <span class="tip">Участвуют только узлы с точно совпадающим кодом (nameEN). Потомки не наследуют участие автоматически.</span>
+         </span>
+       </div>
+       <div class="panel-body">
+         <div class="settings-row" id="serviceKeysRow" style="margin-top:6px"></div>
+       </div>
+     </details>
+ 
+     <details id="block-typical" open>
+       <summary>Фильтр <u>разворачивания</u> групп</summary>
+       <div class="block-actions">
+         <button class="btn xs ghost" data-select-all="typical">Выделить всё</button>
+         <button class="btn xs ghost" data-select-none="typical">Снять всё</button>
+         <button class="btn xs" id="cfgTypicalBtn">Настроить фильтры разворачивания</button>
+         <span class="help" aria-label="Подсказка">?
+           <span class="tip">Группы определяются по *_grp; также можно указывать точный код узла — его ветка будет считаться группой для разворачивания. Можно загружать/сохранять TXT.</span>
+         </span>
+       </div>
+       <div class="panel-body">
+         <div class="settings-row" id="typicalKeysRow" style="margin-top:6px"></div>
+       </div>
+     </details>
+   </div>
+ 
+   <div class="sign-slice">
+-    <label class="cb-inline"><input type="checkbox" id="onlySignable"> Отобразить только подписываемую часть (ActInfo)</label>
++    <label class="cb-inline"><input type="checkbox" id="sliceToggle"> Показать только выбранную ветку</label>
++    <input type="text" id="sliceCode" value="ActInfo">
+   </div>
+ 
+   <div class="tree-controls">
+     <label class="cb-inline">Уровень раскрытия:
+       <select class="mono" id="autoDepth">
+         <option>1</option><option>2</option><option>3</option><option>4</option>
+         <option>5</option><option>6</option><option>7</option><option>8</option>
+         <option>9</option><option>10</option><option value="all" selected>Все</option>
+       </select>
+     </label>
+   </div>
+   <div class="tree-help">
+     <button class="btn xs" id="toggleCompact">Сжать окно дерева</button>
+     <div class="help" aria-label="Подсказка">?
+       <div class="tip">Навигация: ↑/↓ — строки; →/← — раскрыть/свернуть; Enter — карточка; Ctrl+клик — раскрыть ветвь. Кнопка «Сжать/Развернуть окно дерева» меняет высоту области дерева.</div>
+     </div>
+   </div>
+ 
+   <div class="tree-wrap" id="treeWrap">
+     <div class="tree" id="tree"></div>
+   </div>
+ 
+   <div class="line" style="margin-top:12px"></div>
+   <div class="settings-row" id="exportSection" style="margin:8px 0; flex-wrap:wrap; gap:8px">
+     <button class="btn" data-dl="txt">Экспорт TXT</button>
+@@ -316,113 +318,393 @@
+   <div class="dlg-actions" style="display:flex; justify-content:space-between; gap:8px">
+     <div style="display:flex; gap:8px">
+       <input type="file" id="serviceTxtFile" accept=".txt" style="display:none"/>
+       <button class="btn" id="serviceLoadTxt">Загрузить TXT</button>
+       <button class="btn" id="serviceExportTxt">Экспорт TXT</button>
+     </div>
+     <div style="display:flex; gap:8px">
+       <button class="btn" id="serviceCfgCancel">Отмена</button>
+       <button class="btn primary" id="serviceCfgApply">Применить</button>
+     </div>
+   </div>
+ </dialog>
+ 
+ <script>
+ /* ===================== Константы/хранилище ===================== */
+ const LS_VIEW='xsdv:view';
+ const LS_FILTER_SERVICE='xsdv:filtersService';
+ const LS_FILTER_TYPICAL='xsdv:filtersTypical';
+ const LS_LEVEL='xsdv:expandLevel';
+ const LS_EXP='xsdv:expandedIds';
+ const LS_SLICE='xsdv:signSlice';
+ const LS_TYPICAL_CFG='xsdv:typicalCfgSimple';
+ const LS_SERVICE_ALL='xsdv:serviceAll';
+ const LS_OVERRIDES='xsdv:filterOverrides';
+ const LS_TREE_COMPACT='xsdv:treeCompact';
++const SLICE_DEFAULT_CODE='ActInfo';
+ 
+ /* Цвета: разные HUE у верхних веток, глубина — светлее */
+ const BRANCH_HUES = [210,150,30,270,0,190,340,120];
+ const SAT_BASE  = 78, SAT_FLOOR = 30, STEP_S = 6;
+ const L_BASE    = 78, L_CEIL    = 96, STEP_L = 3;
+ const satFor = d => (d<=0? SAT_BASE : Math.max(SAT_FLOOR, SAT_BASE - STEP_S*Math.max(0,d-1)));
+ const lightFor = d => Math.min(L_CEIL, L_BASE + STEP_L*Math.max(0,d));
+ 
+ /* Вью по умолчанию */
+ const defaultView={
+   showRU:true, showEN:true, showL:false, showType:false, showReq:false, colorLevels:true,
+   copyRU:true, copyPath:false, copyEN:true,
+   rowFilterDisplay:true, rowFilterExpand:true
+ };
+ 
+ /* ===================== Состояние ===================== */
+ const state={
+   view: loadJSON(LS_VIEW, defaultView),
+   filtersService: loadJSON(LS_FILTER_SERVICE, {}),     // пусто по умолчанию
+   filtersTypical: loadJSON(LS_FILTER_TYPICAL, {}),     // пусто по умолчанию
+   expandLevel: (localStorage.getItem(LS_LEVEL) || 'all'),
+   expanded: new Set(loadJSON(LS_EXP, [])),
+   focusedIndex: 0,
+   modelRoot: null,
+   repo: null,
+-  slice: loadJSON(LS_SLICE, {method:'none', anchorQName:'', anchorPath:''}),
++  slice: normalizeSliceState(loadJSON(LS_SLICE, null)),
++  sliceVisibleIds: new Set(),
++  sliceVisiblePaths: new Set(),
++  slicePendingReapply: false,
+   typicalCodes: loadTypicalCodes(),                    // []
+   serviceAllCodes: loadServiceAllCodes(),              // []
+   filterOverrides: new Set(loadJSON(LS_OVERRIDES, [])),
+   treeCompact: (localStorage.getItem(LS_TREE_COMPACT)==='true')
+ };
++state.slicePendingReapply = state.slice.method === 'code';
+ 
+ const buildDiagnostics = { missingTypes: [], missingElements: [] , idXmlCount:0, idBusinessCount:0, unresolvedImports:[] };
+ 
+ /* ===================== Код-листы ===================== */
+ function loadTypicalCodes(){
+   const raw = localStorage.getItem(LS_TYPICAL_CFG);
+   if(!raw) return [];
+   try{ const arr=JSON.parse(raw); return Array.isArray(arr)? arr.filter(Boolean):[]; }catch(_){ return []; }
+ }
+ function saveTypicalCodes(arr){ localStorage.setItem(LS_TYPICAL_CFG, JSON.stringify(arr)); }
+ 
+ function loadServiceAllCodes(){
+   const raw = localStorage.getItem(LS_SERVICE_ALL);
+   if(!raw) return [];
+   try{ const arr=JSON.parse(raw); return Array.isArray(arr)? arr.filter(Boolean):[]; }catch(_){ return []; }
+ }
+ function saveServiceAllCodes(arr){
+   const uniq = Array.from(new Set(arr.map(s=>String(s).trim()).filter(Boolean)));
+   localStorage.setItem(LS_SERVICE_ALL, JSON.stringify(uniq));
+   state.serviceAllCodes = uniq;
+ }
+ 
++/* ===================== Режим выбора ветки ===================== */
++function emptySliceState(){
++  return { method:'none', anchorCode:'', anchorQName:'', anchorPath:'', anchorId:'' };
++}
++function normalizeSliceState(raw){
++  const base = emptySliceState();
++  if(!raw || typeof raw!=='object') return base;
++  const method = raw.method==='code' || raw.method==='actinfo' ? 'code' : 'none';
++  const codeRaw = String(raw.anchorCode||'').trim();
++  const fallback = String(raw.anchorQName||'').trim();
++  const anchorCode = method==='code' ? (codeRaw || fallback || SLICE_DEFAULT_CODE) : (codeRaw || fallback);
++  return {
++    method,
++    anchorCode: anchorCode || '',
++    anchorQName: String(raw.anchorQName||''),
++    anchorPath: String(raw.anchorPath||''),
++    anchorId: String(raw.anchorId||'')
++  };
++}
++function isSliceActive(){ return state.slice.method==='code'; }
++function persistSliceState(){ localStorage.setItem(LS_SLICE, JSON.stringify(state.slice)); }
++function syncSliceControls(){
++  els.sliceToggle.checked = isSliceActive();
++  if(!els.sliceInput){ return; }
++  const val = state.slice.anchorCode && state.slice.anchorCode.trim() ? state.slice.anchorCode.trim() : SLICE_DEFAULT_CODE;
++  if(document.activeElement !== els.sliceInput){
++    els.sliceInput.value = val;
++  }
++}
++function clearSliceVisibilitySets(){
++  state.sliceVisibleIds = new Set();
++  state.sliceVisiblePaths = new Set();
++}
++function buildSliceVisibility(anchor){
++  const ids=new Set();
++  const paths=new Set();
++  walk(anchor, node=>{
++    if(node._id) ids.add(node._id);
++    const xp = xpathEN(node);
++    if(xp) paths.add(xp);
++  });
++  return {ids, paths};
++}
++function applySliceVisibility(options={}){
++  const {toastOnMissing=false, strict=false} = options;
++  const rows = els.tree ? els.tree.querySelectorAll('.row') : [];
++  if(!rows.length){ return true; }
++  if(!isSliceActive()){
++    rows.forEach(r=> r.removeAttribute('hidden'));
++    return true;
++  }
++  const hasIds = state.sliceVisibleIds && state.sliceVisibleIds.size>0;
++  const hasPaths = state.sliceVisiblePaths && state.sliceVisiblePaths.size>0;
++  if(!hasIds && !hasPaths){
++    rows.forEach(r=> r.removeAttribute('hidden'));
++    if(toastOnMissing){
++      showToast('Невозможно сузить ветку: нет идентификаторов строк.');
++    }
++    return false;
++  }
++  let visibleCount=0;
++  rows.forEach(row=>{
++    const id=row.dataset.id||'';
++    const path=row.dataset.path||'';
++    const show=(id && state.sliceVisibleIds.has(id)) || (!id && path && state.sliceVisiblePaths.has(path));
++    if(show){
++      row.removeAttribute('hidden');
++      visibleCount++;
++    }else{
++      row.setAttribute('hidden','');
++    }
++  });
++  if(visibleCount===0 && strict){
++    rows.forEach(r=> r.removeAttribute('hidden'));
++    if(toastOnMissing){
++      const code = (state.slice.anchorCode||'').trim();
++      showToast(code ? `Код "${code}" отсутствует в дереве. Проверьте написание.` : 'Ветка не найдена.');
++    }
++    return false;
++  }
++  return true;
++}
++function findNodeByCodeOrQName(code){
++  if(!state.modelRoot || !code) return null;
++  const norm = normalize(code);
++  let found=null;
++  walk(state.modelRoot, n=>{
++    if(found) return;
++    if(normalize(n.nameEN)===norm) found=n;
++  });
++  if(found) return found;
++  walk(state.modelRoot, n=>{
++    if(found) return;
++    if(normalize(n.qname)===norm) found=n;
++  });
++  return found;
++}
++function findNodeByQNameExact(qn){
++  if(!state.modelRoot || !qn) return null;
++  const norm = normalize(qn);
++  let found=null;
++  walk(state.modelRoot, n=>{
++    if(found) return;
++    if(normalize(n.qname)===norm) found=n;
++  });
++  return found;
++}
++function sliceAnchorFromState(){
++  if(!isSliceActive() || !state.modelRoot) return null;
++  const {anchorId, anchorCode, anchorQName} = state.slice;
++  let anchor = anchorId ? getByIdFull(anchorId) : null;
++  if(!anchor && anchorCode) anchor = findNodeByCodeOrQName(anchorCode);
++  if(!anchor && anchorQName) anchor = findNodeByQNameExact(anchorQName);
++  return anchor;
++}
++function scrollToSliceAnchor(id){
++  if(!id) return;
++  const row = els.tree?.querySelector(`.row[data-id="${CSS.escape(id)}"]`);
++  if(row){
++    row.scrollIntoView({behavior:'smooth', block:'center'});
++  }
++}
++function ensureAnchorPathExpanded(anchor){
++  if(!anchor || !anchor._id){ return false; }
++  const ids=[];
++  let cur=anchor._id;
++  while(cur){
++    ids.push(cur);
++    const idx=cur.lastIndexOf('/');
++    if(idx<0) break;
++    cur=cur.slice(0, idx);
++  }
++  let changed=false;
++  ids.reverse().forEach(id=>{
++    if(!state.expanded.has(id)){
++      state.expanded.add(id);
++      changed=true;
++    }
++  });
++  return changed;
++}
++function deactivateSlice({persist=true, silent=false}={}){
++  clearSliceVisibilitySets();
++  state.slice = {
++    ...state.slice,
++    method:'none',
++    anchorId:'',
++    anchorQName:'',
++    anchorPath:''
++  };
++  state.slicePendingReapply = false;
++  if(persist) persistSliceState();
++  applySliceVisibility();
++  syncSliceControls();
++  if(!silent){
++    // без уведомления — по ТЗ
++  }
++}
++function activateSliceFromInput(){
++  if(!state.modelRoot){
++    els.sliceToggle.checked = false;
++    showToast('Загрузите XSD, чтобы выбрать ветку');
++    return;
++  }
++  const raw = els.sliceInput?.value || '';
++  const code = raw.trim();
++  if(!code){
++    els.sliceToggle.checked = false;
++    showToast('Введите код ветки');
++    return;
++  }
++  const anchor = findNodeByCodeOrQName(code);
++  if(!anchor){
++    els.sliceToggle.checked = false;
++    showToast(`Код "${code}" отсутствует в дереве. Проверьте написание.`);
++    deactivateSlice({persist:true, silent:true});
++    state.slice = { ...state.slice, anchorCode: code };
++    persistSliceState();
++    syncSliceControls();
++    return;
++  }
++  els.sliceInput.value = code;
++  const expanded = ensureAnchorPathExpanded(anchor);
++  if(expanded){ saveState(); }
++  state.slice = {
++    method:'code',
++    anchorCode: code,
++    anchorQName: anchor.qname || '',
++    anchorPath: xpathEN(anchor),
++    anchorId: anchor._id || ''
++  };
++  state.slicePendingReapply = true;
++  persistSliceState();
++  syncSliceControls();
++  withPreservedScroll(()=> renderModel(), anchor._id);
++}
++function reapplySliceAfterRender(){
++  if(!isSliceActive()){
++    applySliceVisibility();
++    return;
++  }
++  const anchor = sliceAnchorFromState();
++  if(!anchor){
++    const needToast = state.slicePendingReapply;
++    deactivateSlice({persist:true, silent:true});
++    if(needToast){
++      const code = (state.slice.anchorCode||'').trim();
++      showToast(code ? `Код "${code}" отсутствует в дереве. Проверьте написание.` : 'Ветка не найдена.');
++    }
++    syncSliceControls();
++    return;
++  }
++  const vis = buildSliceVisibility(anchor);
++  state.sliceVisibleIds = vis.ids;
++  state.sliceVisiblePaths = vis.paths;
++  state.slice = {
++    method:'code',
++    anchorCode: (state.slice.anchorCode && state.slice.anchorCode.trim()) || anchor.nameEN || '',
++    anchorQName: anchor.qname || '',
++    anchorPath: xpathEN(anchor),
++    anchorId: anchor._id || ''
++  };
++  const applied = applySliceVisibility({toastOnMissing: state.slicePendingReapply, strict: state.slicePendingReapply});
++  if(!applied){
++    deactivateSlice({persist:true, silent:true});
++    syncSliceControls();
++    return;
++  }
++  persistSliceState();
++  if(state.slicePendingReapply){
++    syncSliceControls();
++    scrollToSliceAnchor(anchor._id);
++    const code = (state.slice.anchorCode||'').trim();
++    if(code) showToast(`Показана ветка: ${code}`);
++  }
++  state.slicePendingReapply = false;
++}
++function initSliceUI(){
++  syncSliceControls();
++  if(els.sliceToggle){
++    els.sliceToggle.addEventListener('change', ()=>{
++      if(els.sliceToggle.checked){
++        state.slicePendingReapply = false;
++        activateSliceFromInput();
++      }else{
++        deactivateSlice({persist:true});
++      }
++    });
++  }
++  if(els.sliceInput){
++    els.sliceInput.addEventListener('input', ()=>{
++      const val = (els.sliceInput.value||'').trim();
++      const wasActive = isSliceActive();
++      if(wasActive){
++        els.sliceToggle.checked = false;
++        deactivateSlice({persist:false, silent:true});
++      }else{
++        clearSliceVisibilitySets();
++        applySliceVisibility();
++      }
++      state.slice = {
++        ...state.slice,
++        method:'none',
++        anchorCode: val,
++        anchorId:'',
++        anchorQName:'',
++        anchorPath:''
++      };
++      state.slicePendingReapply = false;
++      persistSliceState();
++    });
++  }
++}
++
+ /* ===================== DOM ===================== */
+ const els={
+   tree: q('#tree'),
+   treeWrap:q('#treeWrap'),
+   toggleCompact:q('#toggleCompact'),
+   filesBadge:q('#filesBadge'), globalsBadge:q('#globalsBadge'), typesBadge:q('#typesBadge'),
+   maxDepthBadge:q('#maxDepthBadge'), rowsBadge:q('#rowsBadge'),
+   progressWrap:q('#progressWrap'),
+   autoDepth:q('#autoDepth'),
+-  onlySignable:q('#onlySignable'),
++  sliceToggle:q('#sliceToggle'),
++  sliceInput:q('#sliceCode'),
+   toast:q('#toast'),
+   reportBtn:q('#reportBtn'), reportDlg:q('#reportDlg'), reportClose:q('#reportClose'), reportBody:q('#reportBody'),
+   fileInput:q('#fileInput'), parseBtn:q('#parseBtn'),
+   serviceKeysRow:q('#serviceKeysRow'),
+   typicalKeysRow:q('#typicalKeysRow'),
+   cfgTypicalBtn:q('#cfgTypicalBtn'),
+   typicalCfgDlg:q('#typicalCfgDlg'),
+   typicalCodesArea:q('#typicalCodes'),
+   typicalImportBtn:q('#typicalLoadTxt'), typicalImportFile:q('#typicalTxtFile'),
+   typicalExportBtn:q('#typicalExportTxt'),
+   typicalCfgCancel:q('#typicalCfgCancel'), typicalCfgApply:q('#typicalCfgApply'),
+   cfgServiceBtn:q('#cfgServiceBtn'),
+   serviceCfgDlg:q('#serviceCfgDlg'),
+   serviceCodesArea:q('#serviceCodes'),
+   serviceImportBtn:q('#serviceLoadTxt'), serviceImportFile:q('#serviceTxtFile'),
+   serviceExportBtn:q('#serviceExportTxt'),
+   serviceCfgCancel:q('#serviceCfgCancel'), serviceCfgApply:q('#serviceCfgApply'),
+   fltMenu:q('#fltMenu')
+ };
+ let _menuScroller = null;
+ let _onScrollReposition = null;
+ 
+ function _addMenuRepositioners(handler){
+   window.addEventListener('scroll', handler, { passive:true });
+   window.addEventListener('resize', handler);
+@@ -497,80 +779,88 @@ function toggleBlock(block, val){
+   }
+   if(block==='typical'){
+     document.querySelectorAll('#block-typical [data-filter-typical]').forEach(x=>{
+       const k=x.getAttribute('data-filter-typical'); state.filtersTypical[k]=val; x.checked=val;
+     });
+     saveFiltersToLS(); withPreservedScroll(()=> renderModel()); return;
+   }
+ }
+ 
+ /* Чекбоксы «Настройки отображения» — без сброса позиции */
+ document.addEventListener('change',(e)=>{
+   const t = e.target;
+   if(t.matches('[data-view]')){
+     state.view[t.getAttribute('data-view')] = t.checked; saveState();
+     withPreservedScroll(()=> renderModel());
+   }
+   if(t.matches('#autoDepth')){
+     state.expandLevel=t.value; localStorage.setItem(LS_LEVEL, state.expandLevel);
+     if(state.modelRoot){
+       state.expanded.clear(); state.expanded.add(state.modelRoot._id);
+       autoExpandToLevel();
+       withPreservedScroll(()=> renderModel());
+     }
+   }
+ });
+-els.onlySignable.checked = false;
+-els.onlySignable.addEventListener('change', ()=>{ withPreservedScroll(()=> renderModel()); });
++initSliceUI();
+ 
+ /* ========= Разбор XSD ========= */
+ els.parseBtn.addEventListener('click', parseFiles);
+ 
+ async function parseFiles(){
+   const files = Array.from(els.fileInput.files||[]);
+   if(!files.length){ showToast('Выберите файлы XSD'); return; }
+   showProgress(true);
+   try{
+     const texts = await Promise.all(files.map(f=>f.text()));
+     const repo = buildXsdRepo(files.map((f,i)=>({name:f.name, text:texts[i]})));
+     state.repo = repo;
+ 
+     const rootElem = pickRootElement(repo);
+     if(!rootElem){ showToast('Не найден корневой глобальный элемент'); showProgress(false); return; }
+ 
+     const rootNode = buildModelFromElement(repo, rootElem);
+     annotateIdsPathsAndBranch(rootNode);
+     inferTypicalGroupContainers(rootNode);
+     annotateRequiredness(rootNode);
+ 
+     state.modelRoot = rootNode;
++    if(state.slice.method==='code') state.slicePendingReapply = true;
++    clearSliceVisibilitySets();
+ 
+     /* Полное раскрытие по умолчанию */
+     state.expanded.clear();
+     state.expanded.add(state.modelRoot._id);
+     state.expandLevel = localStorage.getItem(LS_LEVEL) || 'all';
+     autoExpandToLevel();
++    if(state.slice.method==='code'){
++      const anchor = sliceAnchorFromState();
++      if(anchor){
++        const expanded = ensureAnchorPathExpanded(anchor);
++        if(expanded){ saveState(); }
++      }
++    }
+ 
+     refreshStatsFromRepo(repo, rootNode);
+     renderModel();
+   }catch(err){
+     console.error(err);
+     showToast('Ошибка разбора XSD');
+   }finally{
+     showProgress(false);
+   }
+ }
+ 
+ /* ========= Репозиторий XSD (сокр.) ========= */
+ function buildXsdRepo(items){
+   const parser = new DOMParser(); const XS_NS="http://www.w3.org/2001/XMLSchema";
+   const baseIndex=new Map(), nsTailIndex=new Map();
+ 
+   const docs = items.map(it=>{
+     const doc = parser.parseFromString(it.text,"application/xml");
+     const err = doc.getElementsByTagName('parsererror')[0];
+     if(err) throw new Error(`XML parsererror в ${it.name}: ${err.textContent.slice(0,200)}`);
+     const schema = doc.documentElement && localName(doc.documentElement)==='schema' ? doc.documentElement : null;
+     if(!schema) throw new Error('Не найден xs:schema в '+it.name);
+     const tns = schema.getAttribute('targetNamespace')||'';
+     const basename = (it.name||'').split(/[\\\/]/).pop();
+     baseIndex.set(basename.toLowerCase(), {name:basename, doc, schema, tns});
+@@ -923,107 +1213,90 @@ function filterService(node, FS, isRoot=false){
+   return dfs(node, isRoot);
+ }
+ 
+ /* Разворачивание групп */
+ function applyTypicalGroupExpand(node, FT, FS){
+   const keys = getTypicalList();
+   const isGrpByFlag = keys.some(k=> node[k+'_grp']);
+   const isGrpByExact = keys.some(k=> normalize(node.nameEN)===normalize(k));
+   const isGrp = isGrpByFlag || isGrpByExact;
+ 
+   const overridden = state.filterOverrides.has(node._id);
+   let children = (node.children||[]).map(ch=>applyTypicalGroupExpand(ch, FT, FS)).filter(Boolean);
+ 
+   if(isGrp){
+     const blocked = keys.some(k=> (node[k+'_grp'] || normalize(node.nameEN)===normalize(k)) && (FS?.[k]===false));
+     if(!blocked){
+       const on = keys.some(k=> (node[k+'_grp'] || normalize(node.nameEN)===normalize(k)) && FT[k]!==false);
+       if(!on && !overridden){
+         return {...node, _filteredCollapse:true, children:[]};
+       }
+     }
+   }
+   return {...node, _filteredCollapse:false, children};
+ }
+ 
+-function sliceToActInfo(rootOrig){
+-  const root=deepClone(rootOrig);
+-  const act=(root.children||[]).find(ch =>
+-    /actinfo$/i.test((ch.nameEN||'')) ||
+-    /(^|:)actinfo$/i.test((ch.qname||'')) ||
+-    /акт[\s-]*инфо/i.test((ch.nameRU||''))
+-  );
+-  if(!act){ return root; }
+-  root.children=[deepClone(act)];
+-  root.children[0].level=1;
+-  walkLocal(root.children[0], (n,d)=>{ n.level=d; });
+-  annotateIdsPathsAndBranch(root);
+-  state.slice={method:'actinfo', anchorQName: act.qname||act.nameEN, anchorPath: root.children[0]._pathEN};
+-  localStorage.setItem(LS_SLICE, JSON.stringify(state.slice));
+-  return root;
+-}
+-
+ /* ===================== Вспомогательные модели ===================== */
+ function deepClone(n){ return {...n, children:(n.children||[]).map(deepClone)} }
+ function walkLocal(n, fn, d=1){ fn(n,d); (n.children||[]).forEach(ch=>walkLocal(ch,fn,d+1)); }
+ function walk(n,fn){ if(!n) return; fn(n); (n.children||[]).forEach(ch=>walk(ch,fn)); }  /* исправлено */
+ 
+ function annotateIdsPathsAndBranch(node){
+   node._id = node.nameEN||'root';
+   node._pathEN = node.nameEN||'root';
+   node._depth = node.level ?? 0;
+   node._branch = -1;
+   (node.children||[]).forEach((ch, idx)=> propagateAnnot(ch, node.nameEN||'root', idx, idx));
+ }
+ function propagateAnnot(n, parentPath, localIndex, branchIndex){
+   const seg=n.nameEN||'node';
+   n._id = parentPath + '/' + seg + '#' + localIndex;
+   n._pathEN = n._id;
+   n._depth = (n.level ?? 0);
+   n._branch = branchIndex;
+   (n.children||[]).forEach((ch,i)=> propagateAnnot(ch, n._id, i, branchIndex));
+ }
+ function depthOf(n){ return n.level ?? n._depth ?? 0 }
+ 
+ /* ===================== Рендер ===================== */
+ const elsAutoDepth=q('#autoDepth');
+ function autoExpandToLevel(){
+   const lvl=state.expandLevel==='all'? Infinity : parseInt(state.expandLevel,10);
+   walk(state.modelRoot, n=>{
+     const d=depthOf(n);
+     if(d<lvl && ((n.children||[]).length || n._filteredCollapse)) state.expanded.add(n._id);
+   });
+ }
+ 
+ let flat=[];
+ let suppressFocusScroll=false;
+ 
+ function renderModel(){
+   buildServiceFilterCheckboxes();
+   buildTypicalFilterCheckboxes();
+ 
+-  const model = filteredTree();
++  const model = filteredTree(false);
+   flat=[]; els.tree.innerHTML='';
+ 
+   if(!model){
+     updateBadgesCounts();
+     setMaxDepth(0); setRowsTotal(0);
+     return;
+   }
+ 
+   state.expanded.add(model._id);
+ 
+   function renderNode(node){
+     flat.push(node);
+     const row=ce('div','row'); row.dataset.id=node._id; row.dataset.type=node.type||''; row.dataset.path=xpathEN(node);
+ 
+     if(state.view.colorLevels){
+       const depth=depthOf(node);
+       const hue = BRANCH_HUES[Math.max(0, (node._branch ?? 0)) % BRANCH_HUES.length];
+       const S = satFor(depth);
+       const L = lightFor(depth);
+       row.style.backgroundColor = `hsla(${hue}, ${S}%, ${L}%, .92)`;
+     }else{
+       row.style.backgroundColor = 'transparent';
+     }
+ 
+     const depth=depthOf(node);
+@@ -1134,88 +1407,133 @@ function renderModel(){
+     actions.append(rowFilters, sep, copy);
+ 
+     left.append(caret, dot, content);
+     row.append(left, ce('div'), actions);
+     els.tree.appendChild(row);
+ 
+     const expandedNow = state.expanded.has(node._id);
+     if(expandedNow && (node.children||[]).length){ node.children.forEach(ch=>renderNode(ch)); }
+ 
+     /* события на caret/dot */
+     caret.addEventListener('click', ()=>{
+       if((node.children||[]).length || node._filteredCollapse){
+         withPreservedScroll(()=>{
+           if(state.expanded.has(node._id)) state.expanded.delete(node._id); else state.expanded.add(node._id);
+           saveState();
+           renderModel();
+         }, node._id);
+       }
+     });
+     dot.addEventListener('click', ()=> openCardAtRow(row, node));
+   }
+ 
+   renderNode(model);
+   updateBadgesCounts();
+ 
+-  const maxDepthFull=maxDepthOf(model);
+-  const rowsTotal=countNodes(model);
++  const statsModel = filteredTree();
++  const maxDepthFull=statsModel ? maxDepthOf(statsModel) : 0;
++  const rowsTotal=statsModel ? countNodes(statsModel) : 0;
+   setMaxDepth(maxDepthFull);
+   setRowsTotal(rowsTotal);
+ 
++  reapplySliceAfterRender();
++
+   state.focusedIndex=Math.min(state.focusedIndex, Math.max(0, flat.length-1));
+   focusRowByIndex(state.focusedIndex);
+ }
+ 
+ function pickTypicalCodeForNode(n){
+   for(const k of getTypicalList()){ if(n[k+'_grp']) return k; }
+   return (n.nameEN||'').trim();
+ }
+ 
+ function countHiddenRowsForFilteredNode(id){
+   const orig = getByIdFull(id);
+   if(!orig) return 0;
+   return countDescendants(orig);
+ }
+ 
+-function filteredTree(){
++function filteredTree(applySlice=true){
+   if(!state.modelRoot) return null;
+-  const sliceOn = els.onlySignable.checked;
+-  const base = sliceOn ? sliceToActInfo(state.modelRoot) : deepClone(state.modelRoot);
++  const base = deepClone(state.modelRoot);
+ 
+   const afterTypical = applyTypicalGroupExpand(base, state.filtersTypical, state.filtersService);
+   const afterService = filterService(afterTypical, state.filtersService, true);
++  const pruned = pruneByExpanded(afterService);
+ 
+-  return pruneByExpanded(afterService);
++  if(applySlice && isSliceActive()){
++    return sliceTreeToAnchor(pruned);
++  }
++  return pruned;
+ }
+ function pruneByExpanded(root){
+   function rec(n){
+     const isExpanded = state.expanded.has(n._id) || n._id===root._id;
+     const kids = isExpanded ? (n.children||[]).map(rec).filter(Boolean) : [];
+     return {...n, children:kids};
+   }
+   return rec(root);
+ }
++function sliceTreeToAnchor(root){
++  const anchorId = state.slice.anchorId || '';
++  const code = state.slice.anchorCode || '';
++  const qn = state.slice.anchorQName || '';
++  let anchor = anchorId ? findNodeInTreeById(root, anchorId) : null;
++  if(!anchor && code) anchor = findNodeInTreeByName(root, code);
++  if(!anchor && qn) anchor = findNodeInTreeByQName(root, qn);
++  if(!anchor) return null;
++  return deepClone(anchor);
++}
++function findNodeInTreeById(node, id){
++  if(!node) return null;
++  if(node._id===id) return node;
++  for(const ch of node.children||[]){
++    const found=findNodeInTreeById(ch,id);
++    if(found) return found;
++  }
++  return null;
++}
++function findNodeInTreeByName(node, code){
++  if(!node || !code) return null;
++  const target=normalize(code);
++  if(normalize(node.nameEN)===target) return node;
++  for(const ch of node.children||[]){
++    const found=findNodeInTreeByName(ch, code);
++    if(found) return found;
++  }
++  return null;
++}
++function findNodeInTreeByQName(node, qn){
++  if(!node || !qn) return null;
++  const target=normalize(qn);
++  if(normalize(node.qname)===target) return node;
++  for(const ch of node.children||[]){
++    const found=findNodeInTreeByQName(ch, qn);
++    if(found) return found;
++  }
++  return null;
++}
+ 
+ /* ========= Навигация, карточка ========= */
+ els.tree.addEventListener('click', (e)=>{
+   const row=e.target.closest('.row'); if(!row) return;
+   const id=row.dataset.id; const node=getByIdFull(id);
+ 
+   if(e.ctrlKey && (node.children||[]).length){
+     withPreservedScroll(()=>{
+       expandAllRecursive(node); saveState(); renderModel();
+     }, id);
+   } else if((node.children||[]).length){
+     withPreservedScroll(()=>{
+       if(state.expanded.has(id)) state.expanded.delete(id);
+       saveState(); state.expanded.add(id); renderModel();
+     }, id);
+   }
+ });
+ 
+ document.addEventListener('keydown',(e)=>{
+   if(els.reportDlg.open || els.typicalCfgDlg.open || els.serviceCfgDlg.open) return;
+   const rows=Array.from(els.tree.querySelectorAll('.row:not([hidden])')); if(!rows.length) return;
+   const cur=rows[state.focusedIndex] || rows[0];
+ 
+   if(e.key==='ArrowDown'){ e.preventDefault(); state.focusedIndex=Math.min(state.focusedIndex+1, rows.length-1); focusRowByIndex(state.focusedIndex); }
+   else if(e.key==='ArrowUp'){ e.preventDefault(); state.focusedIndex=Math.max(state.focusedIndex-1, 0); focusRowByIndex(state.focusedIndex); }
+@@ -1451,63 +1769,65 @@ function addCodeToTypicalList(code, turnOn=true){
+ function removeCodeFromTypicalList(code){
+   state.typicalCodes = getTypicalList().filter(x=> normalize(x)!==normalize(code));
+   saveTypicalCodes(state.typicalCodes);
+   ensureTypicalFilterFlags();
+   delete state.filtersTypical[code];
+   localStorage.setItem(LS_FILTER_TYPICAL, JSON.stringify(state.filtersTypical));
+   reindexFlagsAll();
+ }
+ function toggleTypicalCheckbox(code,on){
+   ensureTypicalFilterFlags();
+   if(!(code in state.filtersTypical)) state.filtersTypical[code]=true;
+   state.filtersTypical[code]=!!on;
+   localStorage.setItem(LS_FILTER_TYPICAL, JSON.stringify(state.filtersTypical));
+ }
+ 
+ /* ========= Отчёт ========= */
+ q('#reportBtn').addEventListener('click', ()=>{
+   const body=q('#reportBody');
+   if(!state.repo){
+     body.innerHTML=`<p class="hint">Загрузите XSD, чтобы сформировать отчёт.</p>`;
+   }else{
+     const files=(state.repo.docs||[]).map(d=>d.name);
+     const model=filteredTree();
+     const stats=model? computeStats(model) : {total:0,maxDepth:0};
+     const unresolved=state.repo.unresolvedImports||[];
+-    const anchorMethod=els.onlySignable.checked ? 'actinfo' : '—';
+-    const anchorQName=els.onlySignable.checked ? (state.slice?.anchorQName || '—') : '—';
+-    const anchorPath =els.onlySignable.checked ? (state.slice?.anchorPath || '—') : '—';
++    const sliceActive=isSliceActive();
++    const anchorMethod=sliceActive ? 'code' : '—';
++    const anchorCode =sliceActive ? (state.slice?.anchorCode || '—') : '—';
++    const anchorQName=sliceActive ? (state.slice?.anchorQName || '—') : '—';
++    const anchorPath =sliceActive ? (state.slice?.anchorPath || '—') : '—';
+     const overridesCount = state.filterOverrides.size;
+ 
+     body.innerHTML = `
+       <table>
+         <tr><th>Файлы</th><td>${escapeHtml(files.join(', ')) || '—'}</td></tr>
+         <tr><th>Глобальные элементы</th><td>${state.repo.elements.size}</td></tr>
+         <tr><th>Типы (complex+simple)</th><td>${state.repo.types.size}</td></tr>
+         <tr><th>Всего видимых узлов</th><td>${stats.total}</td></tr>
+         <tr><th>Макс. глубина (видимая)</th><td>${stats.maxDepth}</td></tr>
+-        <tr><th>Срез</th><td>${anchorMethod}; якорь: ${escapeHtml(anchorQName)}; XPath: ${escapeHtml(anchorPath)}</td></tr>
++        <tr><th>Срез</th><td>${anchorMethod}; код: ${escapeHtml(anchorCode)}; QName: ${escapeHtml(anchorQName)}; XPath: ${escapeHtml(anchorPath)}</td></tr>
+         <tr><th>Неразрешённые импорты</th><td>${unresolved.length}</td></tr>
+         <tr><th>XML-ID / Бизнес-ID</th><td>id(xml): ${buildDiagnostics.idXmlCount}; id(business): ${buildDiagnostics.idBusinessCount}</td></tr>
+         <tr><th>Локальные переопр. фильтра</th><td>${overridesCount}</td></tr>
+       </table>
+     `;
+   }
+   q('#reportDlg').showModal();
+ });
+ q('#reportClose').addEventListener('click', ()=> q('#reportDlg').close());
+ 
+ function computeStats(root){
+   const st={total:0,maxDepth:0};
+   walk(root, n=>{ st.total++; const d=depthOf(n); if(d>st.maxDepth) st.maxDepth=d; });
+   return st;
+ }
+ 
+ /* ========= Экспорт/импорт ========= */
+ function handleDownloadAction(kind){
+   if(kind==='txt'){
+     const lines=[];
+     const rows = Array.from(document.querySelectorAll('#tree .row'));
+     if(!rows.length){ showToast('Нет данных для экспорта'); return; }
+     for(const r of rows){
+       if(r.hasAttribute('hidden')) continue;
+       const id = r.dataset.id;
+@@ -1574,51 +1894,57 @@ function exportSettings(){
+   downloadBlob(`XSDV_Настройки__${ts_hyphen()}.json`, new Blob([JSON.stringify(settings,null,2)], {type:'application/json'}));
+ }
+ q('#settingsFile').addEventListener('change', async ()=>{
+   const f=q('#settingsFile').files[0]; if(!f) return;
+   try{
+     const json=JSON.parse(await f.text());
+     if(json.schema!=='xsdv-settings-v2' && json.schema!=='xsdv-settings-v1'){ showToast('Неверный формат настроек'); return; }
+     applyImportedSettings(json);
+     showToast('Настройки применены');
+   }catch(e){ console.error(e); showToast('Ошибка импорта настроек'); }
+ });
+ function applyImportedSettings(s){
+   if(s.view) { state.view=s.view; localStorage.setItem(LS_VIEW, JSON.stringify(state.view)); restoreViewCheckboxes(); }
+   if(s.filtersService){ state.filtersService=s.filtersService; localStorage.setItem(LS_FILTER_SERVICE, JSON.stringify(state.filtersService)); }
+   if(s.filtersTypical){
+     state.filtersTypical=s.filtersTypical;
+     localStorage.setItem(LS_FILTER_TYPICAL, JSON.stringify(state.filtersTypical));
+   }else if(s.filters){
+     state.filtersService={...s.filters};
+     state.filtersTypical={...s.filters};
+     localStorage.setItem(LS_FILTER_SERVICE, JSON.stringify(state.filtersService));
+     localStorage.setItem(LS_FILTER_TYPICAL, JSON.stringify(state.filtersTypical));
+   }
+   if(s.expandLevel){ state.expandLevel=s.expandLevel; localStorage.setItem(LS_LEVEL, state.expandLevel); elsAutoDepth.value=String(state.expandLevel); }
+   if(Array.isArray(s.expanded)) { state.expanded=new Set(s.expanded); localStorage.setItem(LS_EXP, JSON.stringify(s.expanded)); }
+-  if(s.slice) { state.slice=s.slice; localStorage.setItem(LS_SLICE, JSON.stringify(state.slice)); }
++  if(s.slice) {
++    state.slice = normalizeSliceState(s.slice);
++    state.slicePendingReapply = state.slice.method==='code';
++    persistSliceState();
++    clearSliceVisibilitySets();
++    syncSliceControls();
++  }
+   if(Array.isArray(s.typicalCodes)) { state.typicalCodes=s.typicalCodes; saveTypicalCodes(state.typicalCodes); }
+   if(Array.isArray(s.serviceAllCodes)) { saveServiceAllCodes(s.serviceAllCodes); }
+   if(typeof s.treeCompact==='boolean'){ state.treeCompact=s.treeCompact; localStorage.setItem(LS_TREE_COMPACT, String(state.treeCompact)); applyTreeCompact(); }
+   if(Array.isArray(s.overrides)){ state.filterOverrides=new Set(s.overrides); persistOverrides(); }
+   rebuildAfterConfigChange();
+ }
+ 
+ /* ========= Настройки списков ========= */
+ q('#cfgTypicalBtn').addEventListener('click', ()=>{
+   els.typicalCodesArea.value = getTypicalList().join(', ');
+   els.typicalCfgDlg.showModal();
+ });
+ q('#typicalCfgCancel').addEventListener('click', ()=> els.typicalCfgDlg.close());
+ q('#typicalLoadTxt').addEventListener('click', ()=> q('#typicalTxtFile').click());
+ q('#typicalTxtFile').addEventListener('change', async (e)=>{
+   const f=e.target.files[0]; if(!f) return;
+   els.typicalCodesArea.value = await f.text();
+ });
+ q('#typicalExportTxt').addEventListener('click', ()=>{
+   const content=(els.typicalCodesArea.value||'').trim() || getTypicalList().join(', ');
+   downloadBlob(`Типовые_фильтры__${ts_hyphen()}.txt`, new Blob([content], {type:'text/plain;charset=utf-8'}));
+ });
+ q('#typicalCfgApply').addEventListener('click', ()=>{
+   const raw = els.typicalCodesArea.value||'';
+   const codes = raw.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);
+@@ -1930,60 +2256,67 @@ function countDescendants(n){
+   (n.children||[]).forEach(ch=>{
+     c += 1 + countDescendants(ch);
+   });
+   return c;
+ }
+ 
+ /* Инициализация */
+ applyTreeCompact();
+ restoreViewCheckboxes();
+ rebuildAfterConfigChange();
+ 
+ /* Подстановка «Все» в селектор уровня при первом запуске */
+ elsAutoDepth.value = state.expandLevel || 'all';
+ 
+ function restoreViewCheckboxes(){
+   document.querySelectorAll('[data-view]').forEach(x=>{
+     const k=x.getAttribute('data-view'); x.checked = !!state.view[k];
+   });
+ }
+ function rebuildAfterConfigChange(){
+   ensureServiceFilterFlags();
+   ensureTypicalFilterFlags();
+   if(state.modelRoot){
+     reindexFlagsAll();
+     annotateRequiredness(state.modelRoot);
++    if(isSliceActive()){
++      const anchor = sliceAnchorFromState();
++      if(anchor){
++        const expanded = ensureAnchorPathExpanded(anchor);
++        if(expanded){ saveState(); }
++      }
++    }
+   }
+   renderModel();
+ }
+ 
+ 
+ 
+ 
+ // Экспорт текущего видимого дерева в CSV (UTF-8+BOM, sep=;, CRLF)
+ function exportCsvCurrentTree(){
+-  const model = filteredTree(); // учтены фильтры, onlySignable, текущее раскрытие
++  const model = filteredTree(); // учтены фильтры, сужение по ветке и текущее раскрытие
+   if(!model){
+     if (typeof showToast === 'function') showToast('Нет данных для экспорта');
+     return;
+   }
+   const csvBody = generateCSV_FromView(model);     // тело CSV
+   const content = 'sep=;\r\n' + csvBody;           // подсказка Excel о разделителе
+   const bom = '\uFEFF';                            // UTF-8 BOM
+   const blob = new Blob([bom, content], { type:'text/csv;charset=utf-8' });
+ 
+   const url = URL.createObjectURL(blob);
+   const a = document.createElement('a');
+   a.href = url;
+   a.download = 'xsd_tree.csv';
+   document.body.appendChild(a);
+   a.click();
+   a.remove();
+   URL.revokeObjectURL(url);
+ }
+ 
+ // Генерация CSV с добавленным столбцом "Код"
+ function generateCSV_FromView(root){
+   if(!root) return '';
+ 
+   // Фиксированный порядок и состав колонок
+ const cols = [
