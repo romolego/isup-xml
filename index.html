@@ -139,7 +139,8 @@
   dialog th{background:#f7f9fc; font-weight:600}
   dialog .dlg-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:12px}
 
-  .sign-slice{ margin:14px 0; padding:10px 12px; border:1px solid #e6e9ee; border-radius:10px; background:#ffffff; }
+  .sign-slice{ display:flex; align-items:center; gap:12px; margin:14px 0; padding:10px 12px; border:1px solid #e6e9ee; border-radius:10px; background:#ffffff; flex-wrap:wrap; }
+  .sign-slice input[type="text"]{ flex:0 0 220px; max-width:100%; padding:6px 8px; border:1px solid #cfd6df; border-radius:6px; font:13px/1.35 var(--mono); color:#203040; background:#f9fbff; }
 
   #block-view{margin-bottom:12px;}
 </style>
@@ -225,7 +226,8 @@
   </div>
 
   <div class="sign-slice">
-    <label class="cb-inline"><input type="checkbox" id="onlySignable"> Отобразить только подписываемую часть (ActInfo)</label>
+    <label class="cb-inline"><input type="checkbox" id="sliceToggle"> Показать только выбранную ветку</label>
+    <input type="text" id="sliceCode" value="ActInfo">
   </div>
 
   <div class="tree-controls">
@@ -338,6 +340,7 @@ const LS_TYPICAL_CFG='xsdv:typicalCfgSimple';
 const LS_SERVICE_ALL='xsdv:serviceAll';
 const LS_OVERRIDES='xsdv:filterOverrides';
 const LS_TREE_COMPACT='xsdv:treeCompact';
+const SLICE_DEFAULT_CODE='ActInfo';
 
 /* Цвета: разные HUE у верхних веток, глубина — светлее */
 const BRANCH_HUES = [210,150,30,270,0,190,340,120];
@@ -363,12 +366,16 @@ const state={
   focusedIndex: 0,
   modelRoot: null,
   repo: null,
-  slice: loadJSON(LS_SLICE, {method:'none', anchorQName:'', anchorPath:''}),
+  slice: normalizeSliceState(loadJSON(LS_SLICE, null)),
+  sliceVisibleIds: new Set(),
+  sliceVisiblePaths: new Set(),
+  slicePendingReapply: false,
   typicalCodes: loadTypicalCodes(),                    // []
   serviceAllCodes: loadServiceAllCodes(),              // []
   filterOverrides: new Set(loadJSON(LS_OVERRIDES, [])),
   treeCompact: (localStorage.getItem(LS_TREE_COMPACT)==='true')
 };
+state.slicePendingReapply = state.slice.method === 'code';
 
 const buildDiagnostics = { missingTypes: [], missingElements: [] , idXmlCount:0, idBusinessCount:0, unresolvedImports:[] };
 
@@ -391,6 +398,280 @@ function saveServiceAllCodes(arr){
   state.serviceAllCodes = uniq;
 }
 
+/* ===================== Режим выбора ветки ===================== */
+function emptySliceState(){
+  return { method:'none', anchorCode:'', anchorQName:'', anchorPath:'', anchorId:'' };
+}
+function normalizeSliceState(raw){
+  const base = emptySliceState();
+  if(!raw || typeof raw!=='object') return base;
+  const method = raw.method==='code' || raw.method==='actinfo' ? 'code' : 'none';
+  const codeRaw = String(raw.anchorCode||'').trim();
+  const fallback = String(raw.anchorQName||'').trim();
+  const anchorCode = method==='code' ? (codeRaw || fallback || SLICE_DEFAULT_CODE) : (codeRaw || fallback);
+  return {
+    method,
+    anchorCode: anchorCode || '',
+    anchorQName: String(raw.anchorQName||''),
+    anchorPath: String(raw.anchorPath||''),
+    anchorId: String(raw.anchorId||'')
+  };
+}
+function isSliceActive(){ return state.slice.method==='code'; }
+function persistSliceState(){ localStorage.setItem(LS_SLICE, JSON.stringify(state.slice)); }
+function syncSliceControls(){
+  els.sliceToggle.checked = isSliceActive();
+  if(!els.sliceInput){ return; }
+  const val = state.slice.anchorCode && state.slice.anchorCode.trim() ? state.slice.anchorCode.trim() : SLICE_DEFAULT_CODE;
+  if(document.activeElement !== els.sliceInput){
+    els.sliceInput.value = val;
+  }
+}
+function clearSliceVisibilitySets(){
+  state.sliceVisibleIds = new Set();
+  state.sliceVisiblePaths = new Set();
+}
+function buildSliceVisibility(anchor){
+  const ids=new Set();
+  const paths=new Set();
+  walk(anchor, node=>{
+    if(node._id) ids.add(node._id);
+    const xp = xpathEN(node);
+    if(xp) paths.add(xp);
+  });
+  return {ids, paths};
+}
+function applySliceVisibility(options={}){
+  const {toastOnMissing=false, strict=false} = options;
+  const rows = els.tree ? els.tree.querySelectorAll('.row') : [];
+  if(!rows.length){ return true; }
+  if(!isSliceActive()){
+    rows.forEach(r=> r.removeAttribute('hidden'));
+    return true;
+  }
+  const hasIds = state.sliceVisibleIds && state.sliceVisibleIds.size>0;
+  const hasPaths = state.sliceVisiblePaths && state.sliceVisiblePaths.size>0;
+  if(!hasIds && !hasPaths){
+    rows.forEach(r=> r.removeAttribute('hidden'));
+    if(toastOnMissing){
+      showToast('Невозможно сузить ветку: нет идентификаторов строк.');
+    }
+    return false;
+  }
+  let visibleCount=0;
+  rows.forEach(row=>{
+    const id=row.dataset.id||'';
+    const path=row.dataset.path||'';
+    const show=(id && state.sliceVisibleIds.has(id)) || (!id && path && state.sliceVisiblePaths.has(path));
+    if(show){
+      row.removeAttribute('hidden');
+      visibleCount++;
+    }else{
+      row.setAttribute('hidden','');
+    }
+  });
+  if(visibleCount===0 && strict){
+    rows.forEach(r=> r.removeAttribute('hidden'));
+    if(toastOnMissing){
+      const code = (state.slice.anchorCode||'').trim();
+      showToast(code ? `Код "${code}" отсутствует в дереве. Проверьте написание.` : 'Ветка не найдена.');
+    }
+    return false;
+  }
+  return true;
+}
+function findNodeByCodeOrQName(code){
+  if(!state.modelRoot || !code) return null;
+  const norm = normalize(code);
+  let found=null;
+  walk(state.modelRoot, n=>{
+    if(found) return;
+    if(normalize(n.nameEN)===norm) found=n;
+  });
+  if(found) return found;
+  walk(state.modelRoot, n=>{
+    if(found) return;
+    if(normalize(n.qname)===norm) found=n;
+  });
+  return found;
+}
+function findNodeByQNameExact(qn){
+  if(!state.modelRoot || !qn) return null;
+  const norm = normalize(qn);
+  let found=null;
+  walk(state.modelRoot, n=>{
+    if(found) return;
+    if(normalize(n.qname)===norm) found=n;
+  });
+  return found;
+}
+function sliceAnchorFromState(){
+  if(!isSliceActive() || !state.modelRoot) return null;
+  const {anchorId, anchorCode, anchorQName} = state.slice;
+  let anchor = anchorId ? getByIdFull(anchorId) : null;
+  if(!anchor && anchorCode) anchor = findNodeByCodeOrQName(anchorCode);
+  if(!anchor && anchorQName) anchor = findNodeByQNameExact(anchorQName);
+  return anchor;
+}
+function scrollToSliceAnchor(id){
+  if(!id) return;
+  const row = els.tree?.querySelector(`.row[data-id="${CSS.escape(id)}"]`);
+  if(row){
+    row.scrollIntoView({behavior:'smooth', block:'center'});
+  }
+}
+function ensureAnchorPathExpanded(anchor){
+  if(!anchor || !anchor._id){ return false; }
+  const ids=[];
+  let cur=anchor._id;
+  while(cur){
+    ids.push(cur);
+    const idx=cur.lastIndexOf('/');
+    if(idx<0) break;
+    cur=cur.slice(0, idx);
+  }
+  let changed=false;
+  ids.reverse().forEach(id=>{
+    if(!state.expanded.has(id)){
+      state.expanded.add(id);
+      changed=true;
+    }
+  });
+  return changed;
+}
+function deactivateSlice({persist=true, silent=false}={}){
+  clearSliceVisibilitySets();
+  state.slice = {
+    ...state.slice,
+    method:'none',
+    anchorId:'',
+    anchorQName:'',
+    anchorPath:''
+  };
+  state.slicePendingReapply = false;
+  if(persist) persistSliceState();
+  applySliceVisibility();
+  syncSliceControls();
+  if(!silent){
+    // без уведомления — по ТЗ
+  }
+}
+function activateSliceFromInput(){
+  if(!state.modelRoot){
+    els.sliceToggle.checked = false;
+    showToast('Загрузите XSD, чтобы выбрать ветку');
+    return;
+  }
+  const raw = els.sliceInput?.value || '';
+  const code = raw.trim();
+  if(!code){
+    els.sliceToggle.checked = false;
+    showToast('Введите код ветки');
+    return;
+  }
+  const anchor = findNodeByCodeOrQName(code);
+  if(!anchor){
+    els.sliceToggle.checked = false;
+    showToast(`Код "${code}" отсутствует в дереве. Проверьте написание.`);
+    deactivateSlice({persist:true, silent:true});
+    state.slice = { ...state.slice, anchorCode: code };
+    persistSliceState();
+    syncSliceControls();
+    return;
+  }
+  els.sliceInput.value = code;
+  const expanded = ensureAnchorPathExpanded(anchor);
+  if(expanded){ saveState(); }
+  state.slice = {
+    method:'code',
+    anchorCode: code,
+    anchorQName: anchor.qname || '',
+    anchorPath: xpathEN(anchor),
+    anchorId: anchor._id || ''
+  };
+  state.slicePendingReapply = true;
+  persistSliceState();
+  syncSliceControls();
+  withPreservedScroll(()=> renderModel(), anchor._id);
+}
+function reapplySliceAfterRender(){
+  if(!isSliceActive()){
+    applySliceVisibility();
+    return;
+  }
+  const anchor = sliceAnchorFromState();
+  if(!anchor){
+    const needToast = state.slicePendingReapply;
+    deactivateSlice({persist:true, silent:true});
+    if(needToast){
+      const code = (state.slice.anchorCode||'').trim();
+      showToast(code ? `Код "${code}" отсутствует в дереве. Проверьте написание.` : 'Ветка не найдена.');
+    }
+    syncSliceControls();
+    return;
+  }
+  const vis = buildSliceVisibility(anchor);
+  state.sliceVisibleIds = vis.ids;
+  state.sliceVisiblePaths = vis.paths;
+  state.slice = {
+    method:'code',
+    anchorCode: (state.slice.anchorCode && state.slice.anchorCode.trim()) || anchor.nameEN || '',
+    anchorQName: anchor.qname || '',
+    anchorPath: xpathEN(anchor),
+    anchorId: anchor._id || ''
+  };
+  const applied = applySliceVisibility({toastOnMissing: state.slicePendingReapply, strict: state.slicePendingReapply});
+  if(!applied){
+    deactivateSlice({persist:true, silent:true});
+    syncSliceControls();
+    return;
+  }
+  persistSliceState();
+  if(state.slicePendingReapply){
+    syncSliceControls();
+    scrollToSliceAnchor(anchor._id);
+    const code = (state.slice.anchorCode||'').trim();
+    if(code) showToast(`Показана ветка: ${code}`);
+  }
+  state.slicePendingReapply = false;
+}
+function initSliceUI(){
+  syncSliceControls();
+  if(els.sliceToggle){
+    els.sliceToggle.addEventListener('change', ()=>{
+      if(els.sliceToggle.checked){
+        state.slicePendingReapply = false;
+        activateSliceFromInput();
+      }else{
+        deactivateSlice({persist:true});
+      }
+    });
+  }
+  if(els.sliceInput){
+    els.sliceInput.addEventListener('input', ()=>{
+      const val = (els.sliceInput.value||'').trim();
+      const wasActive = isSliceActive();
+      if(wasActive){
+        els.sliceToggle.checked = false;
+        deactivateSlice({persist:false, silent:true});
+      }else{
+        clearSliceVisibilitySets();
+        applySliceVisibility();
+      }
+      state.slice = {
+        ...state.slice,
+        method:'none',
+        anchorCode: val,
+        anchorId:'',
+        anchorQName:'',
+        anchorPath:''
+      };
+      state.slicePendingReapply = false;
+      persistSliceState();
+    });
+  }
+}
+
 /* ===================== DOM ===================== */
 const els={
   tree: q('#tree'),
@@ -400,7 +681,8 @@ const els={
   maxDepthBadge:q('#maxDepthBadge'), rowsBadge:q('#rowsBadge'),
   progressWrap:q('#progressWrap'),
   autoDepth:q('#autoDepth'),
-  onlySignable:q('#onlySignable'),
+  sliceToggle:q('#sliceToggle'),
+  sliceInput:q('#sliceCode'),
   toast:q('#toast'),
   reportBtn:q('#reportBtn'), reportDlg:q('#reportDlg'), reportClose:q('#reportClose'), reportBody:q('#reportBody'),
   fileInput:q('#fileInput'), parseBtn:q('#parseBtn'),
@@ -519,8 +801,7 @@ document.addEventListener('change',(e)=>{
     }
   }
 });
-els.onlySignable.checked = false;
-els.onlySignable.addEventListener('change', ()=>{ withPreservedScroll(()=> renderModel()); });
+initSliceUI();
 
 /* ========= Разбор XSD ========= */
 els.parseBtn.addEventListener('click', parseFiles);
@@ -543,12 +824,21 @@ async function parseFiles(){
     annotateRequiredness(rootNode);
 
     state.modelRoot = rootNode;
+    if(state.slice.method==='code') state.slicePendingReapply = true;
+    clearSliceVisibilitySets();
 
     /* Полное раскрытие по умолчанию */
     state.expanded.clear();
     state.expanded.add(state.modelRoot._id);
     state.expandLevel = localStorage.getItem(LS_LEVEL) || 'all';
     autoExpandToLevel();
+    if(state.slice.method==='code'){
+      const anchor = sliceAnchorFromState();
+      if(anchor){
+        const expanded = ensureAnchorPathExpanded(anchor);
+        if(expanded){ saveState(); }
+      }
+    }
 
     refreshStatsFromRepo(repo, rootNode);
     renderModel();
@@ -945,23 +1235,6 @@ function applyTypicalGroupExpand(node, FT, FS){
   return {...node, _filteredCollapse:false, children};
 }
 
-function sliceToActInfo(rootOrig){
-  const root=deepClone(rootOrig);
-  const act=(root.children||[]).find(ch =>
-    /actinfo$/i.test((ch.nameEN||'')) ||
-    /(^|:)actinfo$/i.test((ch.qname||'')) ||
-    /акт[\s-]*инфо/i.test((ch.nameRU||''))
-  );
-  if(!act){ return root; }
-  root.children=[deepClone(act)];
-  root.children[0].level=1;
-  walkLocal(root.children[0], (n,d)=>{ n.level=d; });
-  annotateIdsPathsAndBranch(root);
-  state.slice={method:'actinfo', anchorQName: act.qname||act.nameEN, anchorPath: root.children[0]._pathEN};
-  localStorage.setItem(LS_SLICE, JSON.stringify(state.slice));
-  return root;
-}
-
 /* ===================== Вспомогательные модели ===================== */
 function deepClone(n){ return {...n, children:(n.children||[]).map(deepClone)} }
 function walkLocal(n, fn, d=1){ fn(n,d); (n.children||[]).forEach(ch=>walkLocal(ch,fn,d+1)); }
@@ -1001,7 +1274,7 @@ function renderModel(){
   buildServiceFilterCheckboxes();
   buildTypicalFilterCheckboxes();
 
-  const model = filteredTree();
+  const model = filteredTree(false);
   flat=[]; els.tree.innerHTML='';
 
   if(!model){
@@ -1156,10 +1429,13 @@ function renderModel(){
   renderNode(model);
   updateBadgesCounts();
 
-  const maxDepthFull=maxDepthOf(model);
-  const rowsTotal=countNodes(model);
+  const statsModel = filteredTree();
+  const maxDepthFull=statsModel ? maxDepthOf(statsModel) : 0;
+  const rowsTotal=statsModel ? countNodes(statsModel) : 0;
   setMaxDepth(maxDepthFull);
   setRowsTotal(rowsTotal);
+
+  reapplySliceAfterRender();
 
   state.focusedIndex=Math.min(state.focusedIndex, Math.max(0, flat.length-1));
   focusRowByIndex(state.focusedIndex);
@@ -1176,15 +1452,18 @@ function countHiddenRowsForFilteredNode(id){
   return countDescendants(orig);
 }
 
-function filteredTree(){
+function filteredTree(applySlice=true){
   if(!state.modelRoot) return null;
-  const sliceOn = els.onlySignable.checked;
-  const base = sliceOn ? sliceToActInfo(state.modelRoot) : deepClone(state.modelRoot);
+  const base = deepClone(state.modelRoot);
 
   const afterTypical = applyTypicalGroupExpand(base, state.filtersTypical, state.filtersService);
   const afterService = filterService(afterTypical, state.filtersService, true);
+  const pruned = pruneByExpanded(afterService);
 
-  return pruneByExpanded(afterService);
+  if(applySlice && isSliceActive()){
+    return sliceTreeToAnchor(pruned);
+  }
+  return pruned;
 }
 function pruneByExpanded(root){
   function rec(n){
@@ -1193,6 +1472,45 @@ function pruneByExpanded(root){
     return {...n, children:kids};
   }
   return rec(root);
+}
+function sliceTreeToAnchor(root){
+  const anchorId = state.slice.anchorId || '';
+  const code = state.slice.anchorCode || '';
+  const qn = state.slice.anchorQName || '';
+  let anchor = anchorId ? findNodeInTreeById(root, anchorId) : null;
+  if(!anchor && code) anchor = findNodeInTreeByName(root, code);
+  if(!anchor && qn) anchor = findNodeInTreeByQName(root, qn);
+  if(!anchor) return null;
+  return deepClone(anchor);
+}
+function findNodeInTreeById(node, id){
+  if(!node) return null;
+  if(node._id===id) return node;
+  for(const ch of node.children||[]){
+    const found=findNodeInTreeById(ch,id);
+    if(found) return found;
+  }
+  return null;
+}
+function findNodeInTreeByName(node, code){
+  if(!node || !code) return null;
+  const target=normalize(code);
+  if(normalize(node.nameEN)===target) return node;
+  for(const ch of node.children||[]){
+    const found=findNodeInTreeByName(ch, code);
+    if(found) return found;
+  }
+  return null;
+}
+function findNodeInTreeByQName(node, qn){
+  if(!node || !qn) return null;
+  const target=normalize(qn);
+  if(normalize(node.qname)===target) return node;
+  for(const ch of node.children||[]){
+    const found=findNodeInTreeByQName(ch, qn);
+    if(found) return found;
+  }
+  return null;
 }
 
 /* ========= Навигация, карточка ========= */
@@ -1473,9 +1791,11 @@ q('#reportBtn').addEventListener('click', ()=>{
     const model=filteredTree();
     const stats=model? computeStats(model) : {total:0,maxDepth:0};
     const unresolved=state.repo.unresolvedImports||[];
-    const anchorMethod=els.onlySignable.checked ? 'actinfo' : '—';
-    const anchorQName=els.onlySignable.checked ? (state.slice?.anchorQName || '—') : '—';
-    const anchorPath =els.onlySignable.checked ? (state.slice?.anchorPath || '—') : '—';
+    const sliceActive=isSliceActive();
+    const anchorMethod=sliceActive ? 'code' : '—';
+    const anchorCode =sliceActive ? (state.slice?.anchorCode || '—') : '—';
+    const anchorQName=sliceActive ? (state.slice?.anchorQName || '—') : '—';
+    const anchorPath =sliceActive ? (state.slice?.anchorPath || '—') : '—';
     const overridesCount = state.filterOverrides.size;
 
     body.innerHTML = `
@@ -1485,7 +1805,7 @@ q('#reportBtn').addEventListener('click', ()=>{
         <tr><th>Типы (complex+simple)</th><td>${state.repo.types.size}</td></tr>
         <tr><th>Всего видимых узлов</th><td>${stats.total}</td></tr>
         <tr><th>Макс. глубина (видимая)</th><td>${stats.maxDepth}</td></tr>
-        <tr><th>Срез</th><td>${anchorMethod}; якорь: ${escapeHtml(anchorQName)}; XPath: ${escapeHtml(anchorPath)}</td></tr>
+        <tr><th>Срез</th><td>${anchorMethod}; код: ${escapeHtml(anchorCode)}; QName: ${escapeHtml(anchorQName)}; XPath: ${escapeHtml(anchorPath)}</td></tr>
         <tr><th>Неразрешённые импорты</th><td>${unresolved.length}</td></tr>
         <tr><th>XML-ID / Бизнес-ID</th><td>id(xml): ${buildDiagnostics.idXmlCount}; id(business): ${buildDiagnostics.idBusinessCount}</td></tr>
         <tr><th>Локальные переопр. фильтра</th><td>${overridesCount}</td></tr>
@@ -1596,7 +1916,13 @@ function applyImportedSettings(s){
   }
   if(s.expandLevel){ state.expandLevel=s.expandLevel; localStorage.setItem(LS_LEVEL, state.expandLevel); elsAutoDepth.value=String(state.expandLevel); }
   if(Array.isArray(s.expanded)) { state.expanded=new Set(s.expanded); localStorage.setItem(LS_EXP, JSON.stringify(s.expanded)); }
-  if(s.slice) { state.slice=s.slice; localStorage.setItem(LS_SLICE, JSON.stringify(state.slice)); }
+  if(s.slice) {
+    state.slice = normalizeSliceState(s.slice);
+    state.slicePendingReapply = state.slice.method==='code';
+    persistSliceState();
+    clearSliceVisibilitySets();
+    syncSliceControls();
+  }
   if(Array.isArray(s.typicalCodes)) { state.typicalCodes=s.typicalCodes; saveTypicalCodes(state.typicalCodes); }
   if(Array.isArray(s.serviceAllCodes)) { saveServiceAllCodes(s.serviceAllCodes); }
   if(typeof s.treeCompact==='boolean'){ state.treeCompact=s.treeCompact; localStorage.setItem(LS_TREE_COMPACT, String(state.treeCompact)); applyTreeCompact(); }
@@ -1952,6 +2278,13 @@ function rebuildAfterConfigChange(){
   if(state.modelRoot){
     reindexFlagsAll();
     annotateRequiredness(state.modelRoot);
+    if(isSliceActive()){
+      const anchor = sliceAnchorFromState();
+      if(anchor){
+        const expanded = ensureAnchorPathExpanded(anchor);
+        if(expanded){ saveState(); }
+      }
+    }
   }
   renderModel();
 }
@@ -1961,7 +2294,7 @@ function rebuildAfterConfigChange(){
 
 // Экспорт текущего видимого дерева в CSV (UTF-8+BOM, sep=;, CRLF)
 function exportCsvCurrentTree(){
-  const model = filteredTree(); // учтены фильтры, onlySignable, текущее раскрытие
+  const model = filteredTree(); // учтены фильтры, сужение по ветке и текущее раскрытие
   if(!model){
     if (typeof showToast === 'function') showToast('Нет данных для экспорта');
     return;
