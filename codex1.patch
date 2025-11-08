@@ -1,5 +1,5 @@
 diff --git a/index.html b/index.html
-index 53a9e0d28f542d12413ce295b8533fdc8cff4809..806d350d6133b86d9c7fb6cb7aaf065dbc75a125 100644
+index 53a9e0d28f542d12413ce295b8533fdc8cff4809..276e6fa3ba1a1d6eb6c1e038997338290af6d38f 100644
 --- a/index.html
 +++ b/index.html
 @@ -117,51 +117,52 @@
@@ -499,7 +499,7 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..806d350d6133b86d9c7fb6cb7aaf065d
      const tns = schema.getAttribute('targetNamespace')||'';
      const basename = (it.name||'').split(/[\\\/]/).pop();
      baseIndex.set(basename.toLowerCase(), {name:basename, doc, schema, tns});
-@@ -923,112 +1115,131 @@ function filterService(node, FS, isRoot=false){
+@@ -923,135 +1115,157 @@ function filterService(node, FS, isRoot=false){
    return dfs(node, isRoot);
  }
  
@@ -626,7 +626,10 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..806d350d6133b86d9c7fb6cb7aaf065d
      return;
    }
  
-   state.expanded.add(model._id);
+-  state.expanded.add(model._id);
++  if(state.modelRoot && model._id === state.modelRoot._id){
++    state.expanded.add(model._id);
++  }
  
    function renderNode(node){
      flat.push(node);
@@ -645,10 +648,35 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..806d350d6133b86d9c7fb6cb7aaf065d
      const depth=depthOf(node);
      const left=ce('div','left'); left.style.paddingLeft=`${depth*20}px`;
  
-     const hasChildren=(node.children||[]).length>0;
+-    const hasChildren=(node.children||[]).length>0;
++    const fullNode = getByIdFull(node._id);
++    const hasChildren = !!(fullNode && ((fullNode.children||[]).length || fullNode._filteredCollapse));
      const caret=ce('div','caret');
      if(hasChildren || node._filteredCollapse){ caret.textContent= state.expanded.has(node._id)? '▼':'▶'; caret.setAttribute('role','button'); caret.title='Раскрыть/свернуть'; }
-@@ -1134,88 +1345,142 @@ function renderModel(){
+     else{ caret.classList.add('empty'); caret.textContent=''; }
+ 
+     const dot=ce('div','dot'); dot.title='Открыть карточку узла';
+     const content=ce('div','content');
+ 
+     const hasRU = !!(node.nameRU && node.nameRU.trim());
+     const nameRU = hasRU ? ce('span','nameRU', node.nameRU) : null;
+     const nameEN = ce('span','nameEN', (state.view.showEN && node.nameEN)? `• ${node.nameEN}` : '');
+ 
+     if(state.view.showRU && hasRU) content.appendChild(nameRU);
+     if(state.view.showEN && node.nameEN) content.appendChild(nameEN);
+ 
+     if(state.view.showType && node.type) content.appendChild(ce('span','type', node.type||''));
+     if(state.view.showReq){
+       const req=ce('span','req');
+       const r=node.req||'optional';
+       req.textContent = r==='required'?'Обяз.':(r==='conditional'?'Условно':'Необяз.');
+       req.className='req req-'+r;
+       content.appendChild(req);
+     }
+     if(state.view.showL) content.appendChild(ce('span','badge-mini','L'+depth));
+ 
+     if(node._filteredCollapse){
+@@ -1134,88 +1348,142 @@ function renderModel(){
      actions.append(rowFilters, sep, copy);
  
      left.append(caret, dot, content);
@@ -676,7 +704,7 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..806d350d6133b86d9c7fb6cb7aaf065d
  
 -  const maxDepthFull=maxDepthOf(model);
 -  const rowsTotal=countNodes(model);
-+  const statsModel = filteredTree();
++  const statsModel = model;
 +  const maxDepthFull=statsModel ? maxDepthOf(statsModel) : 0;
 +  const rowsTotal=statsModel ? countNodes(statsModel) : 0;
    setMaxDepth(maxDepthFull);
@@ -797,7 +825,7 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..806d350d6133b86d9c7fb6cb7aaf065d
  
    if(e.key==='ArrowDown'){ e.preventDefault(); state.focusedIndex=Math.min(state.focusedIndex+1, rows.length-1); focusRowByIndex(state.focusedIndex); }
    else if(e.key==='ArrowUp'){ e.preventDefault(); state.focusedIndex=Math.max(state.focusedIndex-1, 0); focusRowByIndex(state.focusedIndex); }
-@@ -1451,63 +1716,65 @@ function addCodeToTypicalList(code, turnOn=true){
+@@ -1451,63 +1719,65 @@ function addCodeToTypicalList(code, turnOn=true){
  function removeCodeFromTypicalList(code){
    state.typicalCodes = getTypicalList().filter(x=> normalize(x)!==normalize(code));
    saveTypicalCodes(state.typicalCodes);
@@ -867,7 +895,7 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..806d350d6133b86d9c7fb6cb7aaf065d
      for(const r of rows){
        if(r.hasAttribute('hidden')) continue;
        const id = r.dataset.id;
-@@ -1574,51 +1841,56 @@ function exportSettings(){
+@@ -1574,51 +1844,56 @@ function exportSettings(){
    downloadBlob(`XSDV_Настройки__${ts_hyphen()}.json`, new Blob([JSON.stringify(settings,null,2)], {type:'application/json'}));
  }
  q('#settingsFile').addEventListener('change', async ()=>{
@@ -925,7 +953,7 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..806d350d6133b86d9c7fb6cb7aaf065d
  q('#typicalCfgApply').addEventListener('click', ()=>{
    const raw = els.typicalCodesArea.value||'';
    const codes = raw.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);
-@@ -1930,60 +2202,67 @@ function countDescendants(n){
+@@ -1930,60 +2205,67 @@ function countDescendants(n){
    (n.children||[]).forEach(ch=>{
      c += 1 + countDescendants(ch);
    });

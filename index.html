@@ -1221,7 +1221,9 @@ function renderModel(){
     return;
   }
 
-  state.expanded.add(model._id);
+  if(state.modelRoot && model._id === state.modelRoot._id){
+    state.expanded.add(model._id);
+  }
 
   function renderNode(node){
     flat.push(node);
@@ -1240,7 +1242,8 @@ function renderModel(){
     const depth=depthOf(node);
     const left=ce('div','left'); left.style.paddingLeft=`${depth*20}px`;
 
-    const hasChildren=(node.children||[]).length>0;
+    const fullNode = getByIdFull(node._id);
+    const hasChildren = !!(fullNode && ((fullNode.children||[]).length || fullNode._filteredCollapse));
     const caret=ce('div','caret');
     if(hasChildren || node._filteredCollapse){ caret.textContent= state.expanded.has(node._id)? '▼':'▶'; caret.setAttribute('role','button'); caret.title='Раскрыть/свернуть'; }
     else{ caret.classList.add('empty'); caret.textContent=''; }
@@ -1367,7 +1370,7 @@ function renderModel(){
   renderNode(model);
   updateBadgesCounts();
 
-  const statsModel = filteredTree();
+  const statsModel = model;
   const maxDepthFull=statsModel ? maxDepthOf(statsModel) : 0;
   const rowsTotal=statsModel ? countNodes(statsModel) : 0;
   setMaxDepth(maxDepthFull);
