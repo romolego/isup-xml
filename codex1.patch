@@ -1,5 +1,5 @@
 diff --git a/index.html b/index.html
-index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac033c0e9b 100644
+index 53a9e0d28f542d12413ce295b8533fdc8cff4809..806d350d6133b86d9c7fb6cb7aaf065dbc75a125 100644
 --- a/index.html
 +++ b/index.html
 @@ -117,51 +117,52 @@
@@ -110,7 +110,7 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
    <div class="line" style="margin-top:12px"></div>
    <div class="settings-row" id="exportSection" style="margin:8px 0; flex-wrap:wrap; gap:8px">
      <button class="btn" data-dl="txt">Экспорт TXT</button>
-@@ -316,113 +318,393 @@
+@@ -316,113 +318,296 @@
    <div class="dlg-actions" style="display:flex; justify-content:space-between; gap:8px">
      <div style="display:flex; gap:8px">
        <input type="file" id="serviceTxtFile" accept=".txt" style="display:none"/>
@@ -164,8 +164,6 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
    repo: null,
 -  slice: loadJSON(LS_SLICE, {method:'none', anchorQName:'', anchorPath:''}),
 +  slice: normalizeSliceState(loadJSON(LS_SLICE, null)),
-+  sliceVisibleIds: new Set(),
-+  sliceVisiblePaths: new Set(),
 +  slicePendingReapply: false,
    typicalCodes: loadTypicalCodes(),                    // []
    serviceAllCodes: loadServiceAllCodes(),              // []
@@ -223,59 +221,6 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
 +  if(document.activeElement !== els.sliceInput){
 +    els.sliceInput.value = val;
 +  }
-+}
-+function clearSliceVisibilitySets(){
-+  state.sliceVisibleIds = new Set();
-+  state.sliceVisiblePaths = new Set();
-+}
-+function buildSliceVisibility(anchor){
-+  const ids=new Set();
-+  const paths=new Set();
-+  walk(anchor, node=>{
-+    if(node._id) ids.add(node._id);
-+    const xp = xpathEN(node);
-+    if(xp) paths.add(xp);
-+  });
-+  return {ids, paths};
-+}
-+function applySliceVisibility(options={}){
-+  const {toastOnMissing=false, strict=false} = options;
-+  const rows = els.tree ? els.tree.querySelectorAll('.row') : [];
-+  if(!rows.length){ return true; }
-+  if(!isSliceActive()){
-+    rows.forEach(r=> r.removeAttribute('hidden'));
-+    return true;
-+  }
-+  const hasIds = state.sliceVisibleIds && state.sliceVisibleIds.size>0;
-+  const hasPaths = state.sliceVisiblePaths && state.sliceVisiblePaths.size>0;
-+  if(!hasIds && !hasPaths){
-+    rows.forEach(r=> r.removeAttribute('hidden'));
-+    if(toastOnMissing){
-+      showToast('Невозможно сузить ветку: нет идентификаторов строк.');
-+    }
-+    return false;
-+  }
-+  let visibleCount=0;
-+  rows.forEach(row=>{
-+    const id=row.dataset.id||'';
-+    const path=row.dataset.path||'';
-+    const show=(id && state.sliceVisibleIds.has(id)) || (!id && path && state.sliceVisiblePaths.has(path));
-+    if(show){
-+      row.removeAttribute('hidden');
-+      visibleCount++;
-+    }else{
-+      row.setAttribute('hidden','');
-+    }
-+  });
-+  if(visibleCount===0 && strict){
-+    rows.forEach(r=> r.removeAttribute('hidden'));
-+    if(toastOnMissing){
-+      const code = (state.slice.anchorCode||'').trim();
-+      showToast(code ? `Код "${code}" отсутствует в дереве. Проверьте написание.` : 'Ветка не найдена.');
-+    }
-+    return false;
-+  }
-+  return true;
 +}
 +function findNodeByCodeOrQName(code){
 +  if(!state.modelRoot || !code) return null;
@@ -337,7 +282,6 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
 +  return changed;
 +}
 +function deactivateSlice({persist=true, silent=false}={}){
-+  clearSliceVisibilitySets();
 +  state.slice = {
 +    ...state.slice,
 +    method:'none',
@@ -347,7 +291,6 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
 +  };
 +  state.slicePendingReapply = false;
 +  if(persist) persistSliceState();
-+  applySliceVisibility();
 +  syncSliceControls();
 +  if(!silent){
 +    // без уведомления — по ТЗ
@@ -391,47 +334,6 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
 +  syncSliceControls();
 +  withPreservedScroll(()=> renderModel(), anchor._id);
 +}
-+function reapplySliceAfterRender(){
-+  if(!isSliceActive()){
-+    applySliceVisibility();
-+    return;
-+  }
-+  const anchor = sliceAnchorFromState();
-+  if(!anchor){
-+    const needToast = state.slicePendingReapply;
-+    deactivateSlice({persist:true, silent:true});
-+    if(needToast){
-+      const code = (state.slice.anchorCode||'').trim();
-+      showToast(code ? `Код "${code}" отсутствует в дереве. Проверьте написание.` : 'Ветка не найдена.');
-+    }
-+    syncSliceControls();
-+    return;
-+  }
-+  const vis = buildSliceVisibility(anchor);
-+  state.sliceVisibleIds = vis.ids;
-+  state.sliceVisiblePaths = vis.paths;
-+  state.slice = {
-+    method:'code',
-+    anchorCode: (state.slice.anchorCode && state.slice.anchorCode.trim()) || anchor.nameEN || '',
-+    anchorQName: anchor.qname || '',
-+    anchorPath: xpathEN(anchor),
-+    anchorId: anchor._id || ''
-+  };
-+  const applied = applySliceVisibility({toastOnMissing: state.slicePendingReapply, strict: state.slicePendingReapply});
-+  if(!applied){
-+    deactivateSlice({persist:true, silent:true});
-+    syncSliceControls();
-+    return;
-+  }
-+  persistSliceState();
-+  if(state.slicePendingReapply){
-+    syncSliceControls();
-+    scrollToSliceAnchor(anchor._id);
-+    const code = (state.slice.anchorCode||'').trim();
-+    if(code) showToast(`Показана ветка: ${code}`);
-+  }
-+  state.slicePendingReapply = false;
-+}
 +function initSliceUI(){
 +  syncSliceControls();
 +  if(els.sliceToggle){
@@ -440,7 +342,9 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
 +        state.slicePendingReapply = false;
 +        activateSliceFromInput();
 +      }else{
++        const prevId = state.slice.anchorId || '';
 +        deactivateSlice({persist:true});
++        withPreservedScroll(()=> renderModel(), prevId);
 +      }
 +    });
 +  }
@@ -450,10 +354,9 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
 +      const wasActive = isSliceActive();
 +      if(wasActive){
 +        els.sliceToggle.checked = false;
++        const prevId = state.slice.anchorId || '';
 +        deactivateSlice({persist:false, silent:true});
-+      }else{
-+        clearSliceVisibilitySets();
-+        applySliceVisibility();
++        withPreservedScroll(()=> renderModel(), prevId);
 +      }
 +      state.slice = {
 +        ...state.slice,
@@ -506,7 +409,7 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
  function _addMenuRepositioners(handler){
    window.addEventListener('scroll', handler, { passive:true });
    window.addEventListener('resize', handler);
-@@ -497,80 +779,88 @@ function toggleBlock(block, val){
+@@ -497,80 +682,87 @@ function toggleBlock(block, val){
    }
    if(block==='typical'){
      document.querySelectorAll('#block-typical [data-filter-typical]').forEach(x=>{
@@ -558,7 +461,6 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
  
      state.modelRoot = rootNode;
 +    if(state.slice.method==='code') state.slicePendingReapply = true;
-+    clearSliceVisibilitySets();
  
      /* Полное раскрытие по умолчанию */
      state.expanded.clear();
@@ -597,7 +499,7 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
      const tns = schema.getAttribute('targetNamespace')||'';
      const basename = (it.name||'').split(/[\\\/]/).pop();
      baseIndex.set(basename.toLowerCase(), {name:basename, doc, schema, tns});
-@@ -923,107 +1213,90 @@ function filterService(node, FS, isRoot=false){
+@@ -923,112 +1115,131 @@ function filterService(node, FS, isRoot=false){
    return dfs(node, isRoot);
  }
  
@@ -679,13 +581,48 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
    buildServiceFilterCheckboxes();
    buildTypicalFilterCheckboxes();
  
--  const model = filteredTree();
-+  const model = filteredTree(false);
++  const sliceWasActive = isSliceActive();
++  const pendingBefore = state.slicePendingReapply;
++  let missingAnchorMessage = null;
++
++  if(sliceWasActive && state.modelRoot){
++    const anchor = sliceAnchorFromState();
++    if(!anchor){
++      if(pendingBefore){
++        const code = (state.slice.anchorCode||'').trim();
++        missingAnchorMessage = code ? `Код "${code}" отсутствует в дереве. Проверьте написание.` : 'Ветка не найдена.';
++      }
++      deactivateSlice({persist:true, silent:true});
++    }else{
++      if(state.slicePendingReapply){
++        const expanded = ensureAnchorPathExpanded(anchor);
++        if(expanded){ saveState(); }
++      }
++      const prevSlice = state.slice;
++      const normalizedCode = (prevSlice.anchorCode && prevSlice.anchorCode.trim()) || anchor.nameEN || '';
++      const nextSlice = {
++        method:'code',
++        anchorCode: normalizedCode,
++        anchorQName: anchor.qname || '',
++        anchorPath: xpathEN(anchor),
++        anchorId: anchor._id || ''
++      };
++      const changed = ['method','anchorCode','anchorQName','anchorPath','anchorId'].some(key=> prevSlice[key] !== nextSlice[key]);
++      state.slice = nextSlice;
++      if(changed){
++        persistSliceState();
++        syncSliceControls();
++      }
++    }
++  }
++
+   const model = filteredTree();
    flat=[]; els.tree.innerHTML='';
  
    if(!model){
      updateBadgesCounts();
      setMaxDepth(0); setRowsTotal(0);
++    if(missingAnchorMessage) showToast(missingAnchorMessage);
      return;
    }
  
@@ -706,7 +643,12 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
      }
  
      const depth=depthOf(node);
-@@ -1134,88 +1407,133 @@ function renderModel(){
+     const left=ce('div','left'); left.style.paddingLeft=`${depth*20}px`;
+ 
+     const hasChildren=(node.children||[]).length>0;
+     const caret=ce('div','caret');
+     if(hasChildren || node._filteredCollapse){ caret.textContent= state.expanded.has(node._id)? '▼':'▶'; caret.setAttribute('role','button'); caret.title='Раскрыть/свернуть'; }
+@@ -1134,88 +1345,142 @@ function renderModel(){
      actions.append(rowFilters, sep, copy);
  
      left.append(caret, dot, content);
@@ -740,7 +682,16 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
    setMaxDepth(maxDepthFull);
    setRowsTotal(rowsTotal);
  
-+  reapplySliceAfterRender();
++  const sliceActiveNow = isSliceActive();
++  if(sliceActiveNow && pendingBefore){
++    if(state.slice.anchorId) scrollToSliceAnchor(state.slice.anchorId);
++    const code = (state.slice.anchorCode||'').trim();
++    if(code) showToast(`Показана ветка: ${code}`);
++  }
++  if(missingAnchorMessage) showToast(missingAnchorMessage);
++  if(sliceActiveNow){
++    state.slicePendingReapply = false;
++  }
 +
    state.focusedIndex=Math.min(state.focusedIndex, Math.max(0, flat.length-1));
    focusRowByIndex(state.focusedIndex);
@@ -846,7 +797,7 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
  
    if(e.key==='ArrowDown'){ e.preventDefault(); state.focusedIndex=Math.min(state.focusedIndex+1, rows.length-1); focusRowByIndex(state.focusedIndex); }
    else if(e.key==='ArrowUp'){ e.preventDefault(); state.focusedIndex=Math.max(state.focusedIndex-1, 0); focusRowByIndex(state.focusedIndex); }
-@@ -1451,63 +1769,65 @@ function addCodeToTypicalList(code, turnOn=true){
+@@ -1451,63 +1716,65 @@ function addCodeToTypicalList(code, turnOn=true){
  function removeCodeFromTypicalList(code){
    state.typicalCodes = getTypicalList().filter(x=> normalize(x)!==normalize(code));
    saveTypicalCodes(state.typicalCodes);
@@ -916,7 +867,7 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
      for(const r of rows){
        if(r.hasAttribute('hidden')) continue;
        const id = r.dataset.id;
-@@ -1574,51 +1894,57 @@ function exportSettings(){
+@@ -1574,51 +1841,56 @@ function exportSettings(){
    downloadBlob(`XSDV_Настройки__${ts_hyphen()}.json`, new Blob([JSON.stringify(settings,null,2)], {type:'application/json'}));
  }
  q('#settingsFile').addEventListener('change', async ()=>{
@@ -947,7 +898,6 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
 +    state.slice = normalizeSliceState(s.slice);
 +    state.slicePendingReapply = state.slice.method==='code';
 +    persistSliceState();
-+    clearSliceVisibilitySets();
 +    syncSliceControls();
 +  }
    if(Array.isArray(s.typicalCodes)) { state.typicalCodes=s.typicalCodes; saveTypicalCodes(state.typicalCodes); }
@@ -975,7 +925,7 @@ index 53a9e0d28f542d12413ce295b8533fdc8cff4809..9d209ec6402bffb4d294e5932b63f9ac
  q('#typicalCfgApply').addEventListener('click', ()=>{
    const raw = els.typicalCodesArea.value||'';
    const codes = raw.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);
-@@ -1930,60 +2256,67 @@ function countDescendants(n){
+@@ -1930,60 +2202,67 @@ function countDescendants(n){
    (n.children||[]).forEach(ch=>{
      c += 1 + countDescendants(ch);
    });
