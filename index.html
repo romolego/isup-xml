@@ -50,21 +50,29 @@
   .subsection-actions{display:flex; flex-wrap:wrap; align-items:center; gap:6px}
   .inner-sep{border-top:1px dashed var(--line); margin:12px 0}
 
-  .single-row-list{display:flex; flex-direction:column; gap:8px; margin-top:10px}
-  .single-row-item{border:1px solid #e6eaf0; border-radius:10px; padding:8px 10px; background:#f9fbff; display:flex; flex-direction:column; gap:6px; box-shadow:0 1px 2px rgba(0,0,0,.04)}
-  .single-row-item[data-state="inactive"]{opacity:.65; background:#fcfdff}
-  .single-row-top{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px}
-  .single-row-title{font-weight:600; color:#1f2f3a}
-  .single-row-path{font-family:var(--mono); font-size:12px; color:#506070; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-  .single-row-actions{display:flex; flex-wrap:wrap; gap:6px}
-  .single-row-actions .btn{font-size:11px; padding:4px 8px}
-  .single-row-badge{display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#4b5b66}
+  .single-row-list{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; align-items:flex-start}
+  .single-row-list[data-state="inactive"] .single-row-chip{opacity:.55}
+  .single-row-chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid #e0e6ef; border-radius:999px; background:#f9fbff; font-size:13px; line-height:1.2; box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .single-row-chip[data-status="missing"]{background:#fff6f6; border-color:#f1c3c3; color:#8d3a3a}
+  .single-row-chip-title{white-space:nowrap; color:#1f2f3a; font-weight:500}
+  .single-row-chip-sub{white-space:nowrap; color:#5a6a7a}
+  .single-row-chip-marker{border:none; background:transparent; font-size:18px; line-height:1; padding:0 2px 0 0; cursor:pointer; color:#94a3b8; display:inline-flex; align-items:center; justify-content:center; min-width:16px}
+  .single-row-chip-marker:hover{color:#475569}
+  .single-row-chip-marker:focus-visible{outline:2px solid #a7f3d0; border-radius:50%}
+  .single-row-chip[data-status="missing"] .single-row-chip-marker{color:#d97706}
   .single-row-note{font-size:12px; color:#7b8794}
   .single-row-orphans{margin-top:12px; border:1px dashed #f1c3c3; border-radius:10px; padding:10px; background:#fff9f9; color:#8d3a3a; font-size:12px; display:flex; flex-direction:column; gap:6px}
 
   .single-row-orphans h4{margin:0; font-size:13px; font-weight:600}
-  .single-row-orphans ul{margin:0; padding-left:18px}
-  .single-row-orphans li{margin:0}
+  .single-row-orphans ul{margin:0; padding-left:0; list-style:none}
+  .single-row-orphans li{margin:0; display:flex; align-items:center; gap:6px}
+
+  .flt-menu .mi-info{padding:10px 12px; font-size:13px; border-bottom:1px solid #f2f5f9; color:#1d2b36}
+  .flt-menu .mi-info strong{display:block; font-weight:600; color:#16242c; margin-bottom:4px}
+  .flt-menu .mi-info .mi-info-meta{font-size:12px; color:#5a6a7a; margin-top:2px}
+  .flt-menu .mi-info .mi-info-meta span{display:block}
+  .flt-menu .mi-actions{display:flex; gap:6px; padding:8px 10px}
+  .flt-menu .mi-actions .btn{flex:1}
 
   .hint{color:var(--muted)}
   em{font-style:italic; color:#5a6a7a}
@@ -116,6 +124,8 @@
   .dot{width:9px; height:9px; border-radius:50%; background:#1d1d1d12; border:1px solid #00000014; cursor:pointer; flex:0 0 auto}
   .content{display:flex; gap:8px; align-items:baseline; flex-wrap:wrap}
   .badge-mini{background:#fff7ed; border:1px solid #fed7aa; color:#7c3b02; border-radius:6px; padding:0 6px; font-size:11px}
+  .badge-mini.parent-hidden-trigger{cursor:pointer; display:inline-flex; align-items:center; gap:4px}
+  .badge-mini.parent-hidden-trigger:focus-visible{outline:2px solid #a7f3d0}
   .badge-override{background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; border-radius:6px; padding:0 6px; font-size:11px}
   .nameRU{font-weight:600; color:#16242c}
   .nameEN{color:#4a5968}
@@ -244,6 +254,7 @@
               <button class="btn xs ghost" data-select-all="service-single">Выделить всё</button>
               <button class="btn xs ghost" data-select-none="service-single">Снять всё</button>
               <button class="btn xs" id="cfgServiceSingleBtn">Настроить список строк</button>
+              <label class="cb-inline single-row-toggle"><input type="checkbox" id="singleRowToggle"> Не применять фильтр</label>
               <span class="help" aria-label="Подсказка">?
                 <span class="tip">Скрываются только конкретные экземпляры строк. Используйте экспорт/импорт для переноса настроек.</span>
               </span>
@@ -450,6 +461,7 @@ const LS_SERVICE_ALL='xsdv:serviceAll';
 const LS_OVERRIDES='xsdv:filterOverrides';
 const LS_TREE_COMPACT='xsdv:treeCompact';
 const LS_HIDE_ROWS='xsdv:displayHideRows';
+const LS_HIDE_ROWS_PAUSED='xsdv:displayHideRowsPaused';
 const SLICE_DEFAULT_CODE='ActInfo';
 
 /* Цвета: разные HUE у верхних веток, глубина — светлее */
@@ -485,6 +497,7 @@ const state={
   filterOverrides: new Set(loadJSON(LS_OVERRIDES, [])),
   treeCompact: (localStorage.getItem(LS_TREE_COMPACT)==='true'),
   hideRows: new Set((loadJSON(LS_HIDE_ROWS, [])||[]).map(normalizeRowKeyInput).filter(Boolean)),
+  hideRowsPaused: localStorage.getItem(LS_HIDE_ROWS_PAUSED)==='true',
   tempShownRows: new Set(),
   rowKeyIndex: new Map(),
   rowUidIndex: new Map(),
@@ -739,6 +752,7 @@ const els={
   serviceSingleImportBtn:q('#serviceSingleLoadTxt'), serviceSingleImportFile:q('#serviceSingleTxtFile'),
   serviceSingleExportBtn:q('#serviceSingleExportTxt'),
   serviceSingleCfgCancel:q('#serviceSingleCfgCancel'), serviceSingleCfgApply:q('#serviceSingleCfgApply'),
+  singleRowToggle:q('#singleRowToggle'),
   singleRowList:q('#singleRowList'),
   singleRowOrphans:q('#singleRowOrphans'),
   cfgTypicalOnceBtn:q('#cfgTypicalOnceBtn'),
@@ -770,7 +784,7 @@ function _removeMenuRepositioners(handler){
 
 /* === обработчики закрытия меню фильтров: клик-вне и Esc === */
 function onDocDown(e){
-  if (!e.target.closest('#fltMenu') && !e.target.closest('.fbtn')) {
+  if (!e.target.closest('#fltMenu') && !e.target.closest('.fbtn') && !e.target.closest('[data-menu-anchor]')) {
     hideFilterMenu();
   }
 }
@@ -1343,27 +1357,40 @@ function applyTypicalGroupExpand(node, FT, FS){
 function applyOneTimeExpand(node){
   if(!node) return null;
   const codes = getOneTimeList();
-  if(!codes.length) return node;
-  const info = state.oneTimeInfo || computeOneTimeInfo(state.modelRoot);
+  const info = state.oneTimeInfo || { firsts:new Map(), counts:new Map() };
   const firstMap = info.firsts || new Map();
   const countMap = info.counts || new Map();
 
   function dfs(n){
     if(!n) return null;
-    const code = matchCodeFromList(n, codes);
+    const normName = normalize(n.nameEN);
     let kids = (n.children||[]).map(dfs).filter(Boolean);
     let clone = {...n, children:kids};
-    if(!code) return clone;
-    const total = countMap.get(code) || 0;
+    const totalForNode = normName ? (countMap.get(normName) || 0) : 0;
+    if(totalForNode>=2){
+      clone._oneTimeOccurrences = totalForNode;
+    }else if('_oneTimeOccurrences' in clone){
+      delete clone._oneTimeOccurrences;
+    }
+
+    const match = matchCodeFromList(n, codes);
+    if(!match) return clone;
+
+    const { code, normalized } = match;
+    clone._oneTimeCode = code;
+    clone._oneTimeCodeNorm = normalized;
+    const total = countMap.get(normalized) || 0;
+    if(total>=2){
+      clone._oneTimeOccurrences = total;
+    }
     const active = state.filtersTypicalOnce[code]!==false;
     const blockedByService = state.filtersService[code]===false;
     if(!active || blockedByService || total<=0){
       return clone;
     }
-    const firstId = firstMap.get(code) || '';
-    const isFirst = firstId === n._id;
-    clone._oneTimeCode = code;
+    const firstId = firstMap.get(normalized) || '';
     clone._oneTimeFirstId = firstId;
+    const isFirst = firstId === n._id;
     if(total<=1){
       clone._oneTimeFirst = true;
       return clone;
@@ -1465,6 +1492,14 @@ function resolveRowKey(key){
   if(uid && state.rowUidIndex.has(uid)){ node=state.rowUidIndex.get(uid); matchedBy='uid'; }
   if(!node && pathKey && state.pathKeyIndex.has(pathKey)){ node=state.pathKeyIndex.get(pathKey); matchedBy=matchedBy||'path'; }
   return { node: node||null, rowUid:uid, pathKey, matchedBy, key:normalized };
+}
+
+function formatRowPathLabel(path){
+  const str = String(path||'').trim();
+  if(!str) return '—';
+  const parts = str.split('/');
+  if(parts.length<=3) return str;
+  return '…/'+parts.slice(-3).join('/');
 }
 
 function showHiddenRowTemporarily(key, {scroll=false}={}){
@@ -1611,8 +1646,16 @@ function renderModel(){
     if(state.view.showL) content.appendChild(ce('span','badge-mini','L'+depth));
 
     if(node._parentHiddenLabel){
-      const badge=ce('span','badge-mini','Родитель скрыт');
+      const badge=document.createElement('button');
+      badge.type='button';
+      badge.className='badge-mini parent-hidden-trigger';
+      badge.textContent='Родитель скрыт';
       badge.title = node._parentHiddenLabel.title || '';
+      badge.setAttribute('data-menu-anchor','true');
+      badge.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        openHiddenParentMenu(ev.currentTarget, node);
+      });
       content.appendChild(badge);
     }
     if(node._oneTimeFirst && node._oneTimeFullAlso){
@@ -1772,7 +1815,8 @@ function renderModel(){
 function matchCodeFromList(node, codes){
   const normName = normalize(node.nameEN);
   for(const code of codes){
-    if(node[code+'_grp'] || normalize(code)===normName) return code;
+    const normCode = normalize(code);
+    if(node[code+'_grp'] || normCode===normName) return { code, normalized: normCode };
   }
   return null;
 }
@@ -1792,11 +1836,10 @@ function filteredTree(applySlice=true){
   if(!state.modelRoot) return null;
   const base = deepClone(state.modelRoot);
 
-  state.oneTimeInfo = computeOneTimeInfo(state.modelRoot);
-
   const afterTypical = applyTypicalGroupExpand(base, state.filtersTypical, state.filtersService);
   const afterService = filterService(afterTypical, state.filtersService, true);
-  const afterSingle = applySingleRowVisibility(afterService);
+  state.oneTimeInfo = computeOneTimeInfo(afterService);
+  const afterSingle = state.hideRowsPaused ? afterService : applySingleRowVisibility(afterService);
   const afterOnce = applyOneTimeExpand(afterSingle);
   const pruned = pruneByExpanded(afterOnce);
 
@@ -1950,156 +1993,266 @@ function highlightType(tp){
 }
 
 /* ========= Контекстное меню фильтра-кнопок ========= */
-let fltMenuState = { open:false, kind:null, code:'', anchor: null, nodeId:null };
+let fltMenuState = { open:false, kind:null, code:'', anchor:null, nodeId:null, extra:null };
+
+function showContextMenu(state, build){
+  const menu = els.fltMenu;
+  if(!menu) return;
+  if(fltMenuState.open) hideFilterMenu();
+  const anchor = state?.anchor;
+  if(!anchor){
+    fltMenuState = { open:false, kind:null, code:'', anchor:null, nodeId:null, extra:null };
+    return;
+  }
+  fltMenuState = {
+    open:true,
+    kind: state.kind||null,
+    code: state.code||'',
+    anchor,
+    nodeId: state.nodeId||null,
+    extra: state.extra||null
+  };
+
+  menu.innerHTML='';
+  build(menu);
+  if(!menu.children.length){
+    hideFilterMenu();
+    return;
+  }
+
+  menu.style.display='block';
+
+  function positionMenu(){
+    const anchorEl = fltMenuState.anchor;
+    if(!anchorEl || !document.contains(anchorEl)){
+      hideFilterMenu();
+      return;
+    }
+    const r = anchorEl.getBoundingClientRect();
+    const maxLeft = window.innerWidth - 360;
+    const x = window.scrollX + Math.min(Math.max(0, r.left), Math.max(0, maxLeft));
+    const y = window.scrollY + r.bottom + 6;
+    menu.style.left = x + 'px';
+    menu.style.top  = y + 'px';
+  }
+
+  positionMenu();
+  _onScrollReposition = () => positionMenu();
+  _addMenuRepositioners(_onScrollReposition);
+
+  setTimeout(()=> {
+    document.addEventListener('mousedown', onDocDown, true);
+    document.addEventListener('keydown', onEsc, true);
+  },0);
+}
+
 function openFilterMenu(btn, node, kind, code, blocked=false){
   if(kind==='typical' && (!code || !code.trim())) code = (node.nameEN||'').trim();
-  if(!code){ showToast('Нет кода для операции'); return; }
-  fltMenuState = { open:true, kind, code, anchor:btn, nodeId: node._id };
+  if((kind==='service' || kind==='typical') && (!code || !code.trim())){
+    showToast('Нет кода для операции');
+    return;
+  }
 
-  const menu = els.fltMenu;
-  menu.innerHTML='';
+  const normalizedCode = normalize(code||'');
   const title = humanTitleForCode(code) || code;
 
-  if(kind==='service'){
-    const rowKeyNorm = normalizeRowKeyInput(rowKeyFor(node));
-    const canHideSingle = rowKeyNorm && depthOf(node)>0;
-    if(canHideSingle){
-      if(state.hideRows.has(rowKeyNorm)){
-        menu.appendChild(mi('Показать строку', ()=> withPreservedScroll(()=>{
-          state.hideRows.delete(rowKeyNorm);
-          persistHideRows();
-          renderModel();
-        }, node._id)));
-      }else{
-        menu.appendChild(mi('Скрыть только строку', ()=> withPreservedScroll(()=>{
-          state.hideRows.add(rowKeyNorm);
-          persistHideRows();
-          renderModel();
-        }, node._id)));
-      }
-    }else{
-      menu.appendChild(mi('Скрыть только строку недоступно для корневого узла', null, true));
-    }
-
-    const svcInList = getServiceList().some(c=> normalize(c)===normalize(code));
-    const svcOn = svcInList && state.filtersService[code]!==false;
-
-    if(!svcInList){
-      menu.appendChild(mi(`Добавить в «Отображение» (${title})`, ()=> withPreservedScroll(()=>{
-        addCodeToServiceList(code, true);
-        showToast('Добавлено в «Отображение»'); renderModel();
-      }, fltMenuState.nodeId)));
-    }else{
-      menu.appendChild(mi('Удалить из «Отображение»', ()=> withPreservedScroll(()=>{
-        removeCodeFromServiceList(code);
-        showToast('Удалено из «Отображение»'); renderModel();
-      }, fltMenuState.nodeId)));
-      if(svcOn){
-        menu.appendChild(mi('Выключить отображение (снять чекбокс)', ()=> withPreservedScroll(()=>{
-          toggleServiceCheckbox(code,false);
-          showToast('Отображение выключено'); renderModel();
-        }, fltMenuState.nodeId)));
-      }else{
-        menu.appendChild(mi('Включить отображение (поставить чекбокс)', ()=> withPreservedScroll(()=>{
-          toggleServiceCheckbox(code,true);
-          showToast('Отображение включено'); renderModel();
-        }, fltMenuState.nodeId)));
-      }
-    }
-  } else if(kind==='typical'){
-    const typInList = getTypicalList().some(c=> normalize(c)===normalize(code));
-    const typOn = typInList && state.filtersTypical[code]!==false;
-    const blockedByService = state.filtersService[code]===false;
-
-    if(blocked){
-      menu.appendChild(mi('Недоступно: отключено в «Отображение»', null, true));
-    }else if(!typInList){
-      menu.appendChild(mi(`Добавить в «Разворачивание» (${title})`, ()=> withPreservedScroll(()=>{
-        addCodeToTypicalList(code, true);
-        showToast('Добавлено в «Разворачивание»'); renderModel();
-      }, fltMenuState.nodeId)));
-    }else{
-      menu.appendChild(mi('Удалить из «Разворачивания»', ()=> withPreservedScroll(()=>{
-        removeCodeFromTypicalList(code);
-        showToast('Удалено из «Разворачивания»'); renderModel();
-      }, fltMenuState.nodeId)));
-      if(typOn){
-        menu.appendChild(mi('Выключить разворачивание (снять чекбокс)', ()=> withPreservedScroll(()=>{
-          toggleTypicalCheckbox(code,false);
-          showToast('Разворачивание выключено'); renderModel();
-        }, fltMenuState.nodeId)));
-      }else{
-        menu.appendChild(mi('Включить разворачивание (поставить чекбокс)', ()=> withPreservedScroll(()=>{
-          toggleTypicalCheckbox(code,true);
-          showToast('Разворачивание включено'); renderModel();
-        }, fltMenuState.nodeId)));
-      }
-      if(blockedByService){
-        const d=mi('Отключено отображением (включите выше)', null, true);
-        menu.appendChild(d);
-      }
-
-      if(node._oneTimeCode){
-        const firstId = node._oneTimeFirstId || (state.oneTimeInfo?.firsts?.get(node._oneTimeCode) || '');
-        if(node._oneTimeHidden){
-          if(firstId && firstId!==node._id){
-            menu.appendChild(mi('Перейти к первой встрече', ()=> jumpToFirstOccurrence(firstId, node._oneTimeCode)));
-          }
-          menu.appendChild(mi('Отобразить один раз', ()=> withPreservedScroll(()=>{
-            state.filterOverrides.add(node._id);
-            persistOverrides();
+  showContextMenu({ kind, code, anchor:btn, nodeId: node._id, extra:{ blocked } }, (menu)=>{
+    if(kind==='service'){
+      const rowKeyNorm = normalizeRowKeyInput(rowKeyFor(node));
+      const canHideSingle = rowKeyNorm && depthOf(node)>0;
+      if(canHideSingle){
+        if(state.hideRows.has(rowKeyNorm)){
+          menu.appendChild(mi('Показать строку', ()=> withPreservedScroll(()=>{
+            state.hideRows.delete(rowKeyNorm);
+            persistHideRows();
             renderModel();
           }, node._id)));
-        }else if(state.filterOverrides.has(node._id)){
-          menu.appendChild(mi('Снять “один раз”', ()=> withPreservedScroll(()=>{
+        }else{
+          menu.appendChild(mi('Скрыть только строку', ()=> withPreservedScroll(()=>{
+            state.hideRows.add(rowKeyNorm);
+            persistHideRows();
+            renderModel();
+          }, node._id)));
+        }
+      }else{
+        menu.appendChild(mi('Скрыть только строку недоступно для корневого узла', null, true));
+      }
+
+      const svcInList = getServiceList().some(c=> normalize(c)===normalizedCode);
+      const svcOn = svcInList && state.filtersService[code]!==false;
+
+      if(!svcInList){
+        menu.appendChild(mi(`Добавить в «Отображение» (${title})`, ()=> withPreservedScroll(()=>{
+          addCodeToServiceList(code, true);
+          showToast('Добавлено в «Отображение»');
+          renderModel();
+        }, node._id)));
+      }else{
+        menu.appendChild(mi('Удалить из «Отображение»', ()=> withPreservedScroll(()=>{
+          removeCodeFromServiceList(code);
+          showToast('Удалено из «Отображение»');
+          renderModel();
+        }, node._id)));
+        if(svcOn){
+          menu.appendChild(mi('Выключить отображение (снять чекбокс)', ()=> withPreservedScroll(()=>{
+            toggleServiceCheckbox(code,false);
+            showToast('Отображение выключено');
+            renderModel();
+          }, node._id)));
+        }else{
+          menu.appendChild(mi('Включить отображение (поставить чекбокс)', ()=> withPreservedScroll(()=>{
+            toggleServiceCheckbox(code,true);
+            showToast('Отображение включено');
+            renderModel();
+          }, node._id)));
+        }
+      }
+    }else if(kind==='typical'){
+      const typInList = getTypicalList().some(c=> normalize(c)===normalizedCode);
+      const typOn = typInList && state.filtersTypical[code]!==false;
+      const effectiveOneTimeCode = node._oneTimeCode || code || '';
+      const blockedByService = state.filtersService[code]===false || state.filtersService[effectiveOneTimeCode]===false;
+      const isBlocked = !!blocked;
+
+      if(isBlocked){
+        menu.appendChild(mi('Недоступно: отключено в «Отображение»', null, true));
+      }else if(!typInList){
+        menu.appendChild(mi(`Добавить в «Разворачивание» (${title})`, ()=> withPreservedScroll(()=>{
+          addCodeToTypicalList(code, true);
+          showToast('Добавлено в «Разворачивание»');
+          renderModel();
+        }, node._id)));
+      }else{
+        menu.appendChild(mi('Удалить из «Разворачивания»', ()=> withPreservedScroll(()=>{
+          removeCodeFromTypicalList(code);
+          showToast('Удалено из «Разворачивания»');
+          renderModel();
+        }, node._id)));
+        if(typOn){
+          menu.appendChild(mi('Выключить разворачивание (снять чекбокс)', ()=> withPreservedScroll(()=>{
+            toggleTypicalCheckbox(code,false);
+            showToast('Разворачивание выключено');
+            renderModel();
+          }, node._id)));
+        }else{
+          menu.appendChild(mi('Включить разворачивание (поставить чекбокс)', ()=> withPreservedScroll(()=>{
+            toggleTypicalCheckbox(code,true);
+            showToast('Разворачивание включено');
+            renderModel();
+          }, node._id)));
+        }
+        if(blockedByService){
+          menu.appendChild(mi('Отключено отображением (включите выше)', null, true));
+        }
+      }
+
+      const onceCounts = state.oneTimeInfo?.counts || new Map();
+      const onceFirsts = state.oneTimeInfo?.firsts || new Map();
+      const normalizedOneTimeCode = normalize(effectiveOneTimeCode);
+      const inOneTime = effectiveOneTimeCode ? getOneTimeList().some(c=> normalize(c)===normalizedOneTimeCode) : false;
+      const onceActive = inOneTime ? state.filtersTypicalOnce[effectiveOneTimeCode]!==false : false;
+      const firstId = node._oneTimeFirstId || onceFirsts.get(normalizedOneTimeCode) || '';
+      const totalOccurrences = (normalizedOneTimeCode ? (onceCounts.get(normalizedOneTimeCode) || 0) : (onceCounts.get(normalizedCode) || 0));
+      const hasOverride = state.filterOverrides.has(node._id);
+      const isHidden = !!node._oneTimeHidden;
+
+      if(inOneTime){
+        const showOnceDisabled = !onceActive || blockedByService || !isHidden;
+        menu.appendChild(mi('Показать только один раз (локально)', showOnceDisabled ? null : ()=> withPreservedScroll(()=>{
+          state.filterOverrides.add(node._id);
+          persistOverrides();
+          renderModel();
+        }, node._id), showOnceDisabled));
+        if(hasOverride){
+          menu.appendChild(mi('Снять локальное отображение', ()=> withPreservedScroll(()=>{
             state.filterOverrides.delete(node._id);
             persistOverrides();
             renderModel();
           }, node._id)));
-          if(firstId && firstId!==node._id){
-            menu.appendChild(mi('Перейти к первой встрече', ()=> jumpToFirstOccurrence(firstId, node._oneTimeCode)));
-          }
-        }else if(firstId && firstId!==node._id){
-          menu.appendChild(mi('Перейти к первой встрече', ()=> jumpToFirstOccurrence(firstId, node._oneTimeCode)));
         }
+        menu.appendChild(mi('Снять “однократно” для кода', ()=> withPreservedScroll(()=>{
+          removeCodeFromOneTimeList(effectiveOneTimeCode);
+          showToast('Код исключён из «однократного»');
+          renderModel();
+        }, node._id)));
+        if(totalOccurrences>=2 && firstId && firstId!==node._id){
+          menu.appendChild(mi('Перейти к первой встрече', ()=> jumpToFirstOccurrence(firstId, effectiveOneTimeCode)));
+        }
+      }else if(totalOccurrences>=2){
+        menu.appendChild(mi('Включить “однократно” для кода', ()=> withPreservedScroll(()=>{
+          addCodeToOneTimeList(effectiveOneTimeCode, true);
+          showToast('Код добавлен в «однократное»');
+          renderModel();
+        }, node._id)));
       }
     }
-  }
-
-
-// закрыть прежнее меню, если оно было открыто
-if (fltMenuState.open) hideFilterMenu();
-
-// показать текущее меню и вычислить позицию относительно кнопки
-menu.style.display = 'block';
-
-function positionMenu(){
-  const anchor = fltMenuState.anchor;
-  if (!anchor || !document.contains(anchor)){ hideFilterMenu(); return; }
-  const r = anchor.getBoundingClientRect();
-  const maxLeft = window.innerWidth - 360;
-  const x = window.scrollX + Math.min(Math.max(0, r.left), Math.max(0, maxLeft));
-  const y = window.scrollY + r.bottom + 6;
-  menu.style.left = x + 'px';
-  menu.style.top  = y + 'px';
+  });
 }
 
-positionMenu();
-_onScrollReposition = () => positionMenu();
-_addMenuRepositioners(_onScrollReposition);
-
-setTimeout(() => {
-  document.addEventListener('mousedown', onDocDown, true);
-  document.addEventListener('keydown', onEsc, true);
-}, 0);
-
-
-
-
+function openHiddenParentMenu(anchor, node){
+  const label = node._parentHiddenLabel || {};
+  const parentKey = normalizeRowKeyInput(label.key || '');
+  showContextMenu({ kind:'hidden-parent', code:'', anchor, nodeId: node._id, extra:{ parentKey } }, (menu)=>{
+    if(!parentKey){
+      menu.appendChild(mi('Не удалось определить скрытого родителя', null, true));
+      return;
+    }
+    menu.appendChild(mi('Удалить родителя из “Отображения одной строки”', ()=> withPreservedScroll(()=>{
+      state.hideRows.delete(parentKey);
+      persistHideRows();
+      renderModel();
+    }, node._id)));
+    menu.appendChild(mi('Показать временно родителя', ()=>{
+      showHiddenRowTemporarily(parentKey, { scroll:true });
+    }));
+  });
 }
+
+function openSingleRowInfoMenu(anchor, info){
+  const normalizedKey = normalizeRowKeyInput(info.key || '');
+  const titleParts = [];
+  const name = (info.name||'').trim();
+  const code = (info.code||'').trim();
+  if(name && code){ titleParts.push(`${name} (${code})`); }
+  else if(name){ titleParts.push(name); }
+  else if(code){ titleParts.push(code); }
+  else if(normalizedKey){ titleParts.push(normalizedKey); }
+
+  const statusText = info.status === 'missing' ? 'Не найдено' : 'Найдено';
+  const keyPath = normalizedKey.split('|').slice(1).join('|');
+  const pathSource = info.path || keyPath;
+  const pathLabel = formatRowPathLabel(pathSource);
+
+  showContextMenu({ kind:'single-info', code:info.code||'', anchor, nodeId:null, extra:{ key: normalizedKey } }, (menu)=>{
+    const box=document.createElement('div');
+    box.className='mi-info';
+    const titleEl=document.createElement('strong');
+    titleEl.textContent= titleParts.join('') || 'Строка';
+    box.appendChild(titleEl);
+    const meta=document.createElement('div');
+    meta.className='mi-info-meta';
+    meta.innerHTML = `<span>Статус: ${escapeHtml(statusText)}</span><span>Путь: ${escapeHtml(pathLabel)}</span><span>Ключ: ${escapeHtml(normalizedKey)}</span>`;
+    box.appendChild(meta);
+    menu.appendChild(box);
+
+    const actions=document.createElement('div');
+    actions.className='mi-actions';
+    const btnGo=ce('button','btn micro','Перейти');
+    const btnTemp=ce('button','btn micro','Показать временно');
+    btnGo.addEventListener('click', ()=>{ hideFilterMenu(); showHiddenRowTemporarily(normalizedKey, { scroll:true }); });
+    btnTemp.addEventListener('click', ()=>{ hideFilterMenu(); showHiddenRowTemporarily(normalizedKey, { scroll:false }); });
+    if(info.status==='missing' || !normalizedKey){
+      btnGo.disabled = true;
+      btnTemp.disabled = true;
+    }
+    actions.append(btnGo, btnTemp);
+    menu.appendChild(actions);
+  });
+}
+
 function hideFilterMenu(){
   els.fltMenu.style.display='none';
-  fltMenuState.open=false;
+  fltMenuState = { open:false, kind:null, code:'', anchor:null, nodeId:null, extra:null };
   document.removeEventListener('mousedown', onDocDown, true);
   document.removeEventListener('keydown', onEsc, true);
   if (_onScrollReposition){
@@ -2164,6 +2317,31 @@ function toggleTypicalCheckbox(code,on){
   if(!(code in state.filtersTypical)) state.filtersTypical[code]=true;
   state.filtersTypical[code]=!!on;
   localStorage.setItem(LS_FILTER_TYPICAL, JSON.stringify(state.filtersTypical));
+}
+
+function addCodeToOneTimeList(code, turnOn=true){
+  if(!code) return;
+  const list = new Set(getOneTimeList()); list.add(code);
+  state.typicalOnceCodes = Array.from(list);
+  saveTypicalOnceCodes(state.typicalOnceCodes);
+  ensureTypicalOnceFilterFlags();
+  state.filtersTypicalOnce[code] = !!turnOn;
+  localStorage.setItem(LS_FILTER_TYPICAL_ONCE, JSON.stringify(state.filtersTypicalOnce));
+  reindexFlagsAll();
+}
+function removeCodeFromOneTimeList(code){
+  state.typicalOnceCodes = getOneTimeList().filter(x=> normalize(x)!==normalize(code));
+  saveTypicalOnceCodes(state.typicalOnceCodes);
+  ensureTypicalOnceFilterFlags();
+  delete state.filtersTypicalOnce[code];
+  localStorage.setItem(LS_FILTER_TYPICAL_ONCE, JSON.stringify(state.filtersTypicalOnce));
+  reindexFlagsAll();
+}
+function toggleOneTimeCheckbox(code,on){
+  ensureTypicalOnceFilterFlags();
+  if(!(code in state.filtersTypicalOnce)) state.filtersTypicalOnce[code]=true;
+  state.filtersTypicalOnce[code]=!!on;
+  localStorage.setItem(LS_FILTER_TYPICAL_ONCE, JSON.stringify(state.filtersTypicalOnce));
 }
 
 /* ========= Отчёт ========= */
@@ -2245,7 +2423,8 @@ function handleDownloadAction(kind){
       serviceAllCodes: state.serviceAllCodes,
       treeCompact: !!state.treeCompact,
       overrides: Array.from(state.filterOverrides),
-      hideRows: Array.from(state.hideRows)
+      hideRows: Array.from(state.hideRows),
+      hideRowsPaused: !!state.hideRowsPaused
     };
     downloadBlob(`xsdv-snapshot-${ts_hyphen()}.json`, new Blob([JSON.stringify(payload,null,2)], {type:'application/json'}));
   }else if(kind==='snap-load'){
@@ -2280,7 +2459,8 @@ function exportSettings(){
     serviceAllCodes: state.serviceAllCodes,
     treeCompact: !!state.treeCompact,
     overrides: Array.from(state.filterOverrides),
-    hideRows: Array.from(state.hideRows)
+    hideRows: Array.from(state.hideRows),
+    hideRowsPaused: !!state.hideRowsPaused
   };
   downloadBlob(`XSDV_Настройки__${ts_hyphen()}.json`, new Blob([JSON.stringify(settings,null,2)], {type:'application/json'}));
 }
@@ -2321,6 +2501,11 @@ function applyImportedSettings(s){
   if(Array.isArray(s.typicalOnceCodes)) { state.typicalOnceCodes=s.typicalOnceCodes; saveTypicalOnceCodes(state.typicalOnceCodes); }
   if(Array.isArray(s.serviceAllCodes)) { saveServiceAllCodes(s.serviceAllCodes); }
   if(Array.isArray(s.hideRows)) { state.hideRows=new Set(s.hideRows.map(normalizeRowKeyInput).filter(Boolean)); persistHideRows(); }
+  if(typeof s.hideRowsPaused==='boolean') {
+    state.hideRowsPaused = s.hideRowsPaused;
+    localStorage.setItem(LS_HIDE_ROWS_PAUSED, state.hideRowsPaused ? 'true' : 'false');
+    if(els.singleRowToggle){ els.singleRowToggle.checked = !!state.hideRowsPaused; }
+  }
   if(typeof s.treeCompact==='boolean'){ state.treeCompact=s.treeCompact; localStorage.setItem(LS_TREE_COMPACT, String(state.treeCompact)); applyTreeCompact(); }
   if(Array.isArray(s.overrides)){ state.filterOverrides=new Set(s.overrides); persistOverrides(); }
   rebuildAfterConfigChange();
@@ -2434,6 +2619,15 @@ els.serviceSingleCfgApply.addEventListener('click', ()=>{
   rebuildAfterConfigChange();
   showToast('Список строк обновлён');
 });
+
+if(els.singleRowToggle){
+  els.singleRowToggle.checked = !!state.hideRowsPaused;
+  els.singleRowToggle.addEventListener('change', ()=>{
+    state.hideRowsPaused = !!els.singleRowToggle.checked;
+    localStorage.setItem(LS_HIDE_ROWS_PAUSED, state.hideRowsPaused ? 'true' : 'false');
+    withPreservedScroll(()=> renderModel());
+  });
+}
 
 /* ========= Рендер чекбоксов ========= */
 function ensureServiceFilterFlags(){
@@ -2595,78 +2789,92 @@ function buildTypicalOnceFilterCheckboxes(){
 function buildSingleRowList(){
   const listEl = els.singleRowList; if(!listEl) return;
   listEl.innerHTML='';
+  listEl.dataset.state = state.hideRowsPaused ? 'inactive' : 'active';
+  if(els.singleRowToggle && els.singleRowToggle.checked !== !!state.hideRowsPaused){
+    els.singleRowToggle.checked = !!state.hideRowsPaused;
+  }
   const orphanEl = els.singleRowOrphans;
   if(orphanEl){ orphanEl.hidden=true; orphanEl.innerHTML=''; }
 
   const keys = Array.from(state.hideRows||[]);
   if(!keys.length){
-    const empty=ce('div','hint','Список пуст. Используйте меню строки «Отображение → Скрыть только строку».');
-    listEl.appendChild(empty);
+    const msg = state.hideRowsPaused
+      ? 'Список пуст. Фильтр сейчас отключён.'
+      : 'Список пуст. Используйте меню строки «Отображение → Скрыть только строку».';
+    listEl.appendChild(ce('div','hint', msg));
     return;
   }
 
-  const orphanKeys=[];
-  const shortPath = (p)=>{
-    const str=String(p||'');
-    if(str.length<=120) return str;
-    return '…'+str.slice(-118);
-  };
-
+  const orphanEntries=[];
   keys.forEach(rawKey=>{
     const info = resolveRowKey(rawKey);
     const normalizedKey = info.key;
     if(!info.node){
-      orphanKeys.push(normalizedKey);
+      orphanEntries.push({ key: normalizedKey });
       return;
     }
     const node = info.node;
-    const item=ce('div','single-row-item');
-    const top=ce('div','single-row-top');
-    const code = (node.nameEN||'').trim() || (info.pathKey||'').split('/').pop()?.split('#')[0] || normalizedKey;
+    const code = (node.nameEN||'').trim();
     const name = (node.nameRU||'').trim();
-    const title=ce('div','single-row-title', name ? `${code} / ${name}` : code);
-    const badge=ce('span','single-row-badge','Строка скрыта фильтром отображения (экземпляр)');
-    top.append(title, badge);
-    item.appendChild(top);
-
-    const pathLabel=ce('div','single-row-path', shortPath(info.pathKey || node._pathKey || node._pathEN || ''));
-    item.appendChild(pathLabel);
-
-    if(info.matchedBy && info.matchedBy!==''){
-      const note=ce('div','single-row-note', info.matchedBy==='uid' ? 'Найдено по rowUid' : 'Найдено по пути');
-      item.appendChild(note);
-    }
-
-    const actions=ce('div','single-row-actions');
-    const btnRemove=ce('button','btn micro','Удалить из списка');
-    btnRemove.addEventListener('click', ()=>{
-      state.hideRows.delete(normalizedKey);
-      persistHideRows();
-      withPreservedScroll(()=> renderModel(), node._id);
+    const labelText = (name && code) ? `${name} (${code})` : (name || code || normalizedKey);
+    const chip=ce('div','single-row-chip');
+    chip.dataset.key = normalizedKey;
+    chip.title = info.pathKey || node._pathKey || node._pathEN || '';
+    const marker=document.createElement('button');
+    marker.type='button';
+    marker.className='single-row-chip-marker';
+    marker.textContent='•';
+    marker.setAttribute('data-menu-anchor','true');
+    marker.setAttribute('aria-label','Информация о скрытой строке');
+    marker.title='Информация о скрытой строке';
+    marker.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      openSingleRowInfoMenu(ev.currentTarget, {
+        key: normalizedKey,
+        name,
+        code,
+        path: info.pathKey || node._pathKey || node._pathEN || '',
+        status:'found'
+      });
     });
-
-    const btnGo=ce('button','btn micro','Перейти');
-    btnGo.addEventListener('click', ()=>{
-      showHiddenRowTemporarily(normalizedKey, { scroll:true });
-    });
-
-    const btnTemp=ce('button','btn micro','Показать временно');
-    btnTemp.addEventListener('click', ()=>{
-      showHiddenRowTemporarily(normalizedKey, { scroll:false });
-    });
-
-    actions.append(btnRemove, btnGo, btnTemp);
-    item.appendChild(actions);
-    listEl.appendChild(item);
+    const title=ce('span','single-row-chip-title', labelText);
+    chip.append(marker, title);
+    listEl.appendChild(chip);
   });
 
-  if(orphanKeys.length && orphanEl){
+  if(orphanEntries.length && orphanEl){
     orphanEl.hidden=false;
-    const title=ce('h4',null,'Не найдены в текущем дереве');
-    const note=ce('div','single-row-note','Записи остались в списке, но соответствующие строки отсутствуют в текущей структуре.');
+    orphanEl.appendChild(ce('h4',null,'Не найдены в текущем дереве'));
     const ul=document.createElement('ul');
-    orphanKeys.forEach(k=>{ const li=document.createElement('li'); li.textContent=k; ul.appendChild(li); });
-    orphanEl.append(title, note, ul);
+    orphanEntries
+      .sort((a,b)=> a.key.localeCompare(b.key))
+      .forEach(item=>{
+        const li=document.createElement('li');
+        const marker=document.createElement('button');
+        marker.type='button';
+        marker.className='single-row-chip-marker';
+        marker.textContent='•';
+        marker.setAttribute('data-menu-anchor','true');
+        marker.setAttribute('aria-label','Информация о скрытой строке');
+        marker.title='Информация о скрытой строке';
+        marker.addEventListener('click', (ev)=>{
+          ev.stopPropagation();
+          const pathFromKey = item.key.split('|').slice(1).join('|');
+          openSingleRowInfoMenu(ev.currentTarget, {
+            key: item.key,
+            name:'',
+            code:'',
+            path:pathFromKey,
+            status:'missing'
+          });
+        });
+        li.append(marker);
+        const text=document.createElement('span');
+        text.textContent=item.key;
+        li.append(text);
+        ul.appendChild(li);
+      });
+    orphanEl.appendChild(ul);
   }
 }
 
@@ -2717,17 +2925,18 @@ function computeTypicalOnceCountsDetail(){
 
 function computeOneTimeInfo(root){
   const codes = getOneTimeList();
+  const normalizedList = new Set(codes.map(normalize));
   const firsts = new Map();
   const counts = new Map();
-  if(!root || !codes.length) return { firsts, counts };
+  if(!root) return { firsts, counts };
   walk(root, n=>{
-    const code = matchCodeFromList(n, codes);
-    if(!code) return;
-    const prev = counts.get(code) || 0;
-    if(prev===0){
-      firsts.set(code, n._id);
+    const codeRaw = (n.nameEN||'').trim();
+    if(!codeRaw) return;
+    const norm = normalize(codeRaw);
+    counts.set(norm, (counts.get(norm) || 0) + 1);
+    if(normalizedList.has(norm) && !firsts.has(norm)){
+      firsts.set(norm, n._id);
     }
-    counts.set(code, prev+1);
   });
   return { firsts, counts };
 }
