@@ -714,8 +714,12 @@ async function parseFiles(){
   if(!files.length){ showToast('Выберите файлы XSD'); return; }
   showProgress(true);
   try{
-    const texts = await Promise.all(files.map(f=>f.text()));
-    const repo = buildXsdRepo(files.map((f,i)=>({name:f.name, text:texts[i]})));
+    const items = [];
+    for(const file of files){
+      const text = await file.text();
+      items.push({name:file.name, text});
+    }
+    const repo = buildXsdRepo(items);
     state.repo = repo;
 
     const rootElem = pickRootElement(repo);
@@ -1213,6 +1217,7 @@ function renderModel(){
 
   const model = filteredTree();
   flat=[]; els.tree.innerHTML='';
+  const fragment = document.createDocumentFragment();
 
   if(!model){
     updateBadgesCounts();
@@ -1346,28 +1351,17 @@ function renderModel(){
 
     left.append(caret, dot, content);
     row.append(left, ce('div'), actions);
-    els.tree.appendChild(row);
+    fragment.appendChild(row);
 
     const expandedNow = state.expanded.has(node._id);
     if(expandedNow && (node.children||[]).length){ node.children.forEach(ch=>renderNode(ch)); }
-
-    /* события на caret/dot */
-    caret.addEventListener('click', ()=>{
-      if((node.children||[]).length || node._filteredCollapse){
-        withPreservedScroll(()=>{
-          if(state.expanded.has(node._id)) state.expanded.delete(node._id); else state.expanded.add(node._id);
-          saveState();
-          renderModel();
-        }, node._id);
-      }
-    });
-    dot.addEventListener('click', ()=> openCardAtRow(row, node));
   }
 
   renderNode(model);
+  els.tree.appendChild(fragment);
   updateBadgesCounts();
 
-  const statsModel = filteredTree();
+  const statsModel = model;
   const maxDepthFull=statsModel ? maxDepthOf(statsModel) : 0;
   const rowsTotal=statsModel ? countNodes(statsModel) : 0;
   setMaxDepth(maxDepthFull);
@@ -1462,8 +1456,33 @@ function findNodeInTreeByQName(node, qn){
 
 /* ========= Навигация, карточка ========= */
 els.tree.addEventListener('click', (e)=>{
+  const caret = e.target.closest('.caret');
+  if(caret){
+    const row = caret.closest('.row'); if(!row) return;
+    const id = row.dataset.id; const node=getByIdFull(id);
+    if(!node) return;
+    if((node.children||[]).length || node._filteredCollapse){
+      withPreservedScroll(()=>{
+        if(state.expanded.has(id)) state.expanded.delete(id); else state.expanded.add(id);
+        saveState();
+        renderModel();
+      }, id);
+    }
+    return;
+  }
+
+  const dot = e.target.closest('.dot');
+  if(dot){
+    const row = dot.closest('.row'); if(!row) return;
+    const node=getByIdFull(row.dataset.id);
+    if(!node) return;
+    openCardAtRow(row, node);
+    return;
+  }
+
   const row=e.target.closest('.row'); if(!row) return;
   const id=row.dataset.id; const node=getByIdFull(id);
+  if(!node) return;
 
   if(e.ctrlKey && (node.children||[]).length){
     withPreservedScroll(()=>{
