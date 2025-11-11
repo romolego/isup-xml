@@ -144,7 +144,7 @@
 
   #block-view{margin-bottom:12px;}
 </style>
-<script src="/html-docx.min.js"></script>
+<script src="html-docx.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -2261,23 +2261,69 @@ function rebuildAfterConfigChange(){
 
 
 const WORD_EXPORT_STYLES = `
-  .word-tree { width: 100%; }
+  body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; font-size: 12pt; color: #0f1720; line-height: 1.35; background: #ffffff; }
+  .word-tree { width: 100%; border: 1px solid #e6e9ee; border-radius: 8px; overflow: hidden; }
   .word-row { padding: 6px 10px; border-top: 1px solid #f3f6fb; page-break-inside: avoid; }
   .word-row:first-child { border-top: none; }
-  .word-content { margin-left: 0; }
-  .word-part { display: inline-block; margin-right: 8px; margin-bottom: 4px; }
-  .word-name-ru { font-weight: 600; color: #16242c; }
+  .word-content { margin-left: 0; display: block; }
+  .word-part { display: inline-block; margin-right: 8px; margin-bottom: 4px; font-size: 11pt; vertical-align: baseline; }
+  .word-name-ru { font-weight: 600; color: #16242c; font-size: 12pt; }
   .word-name-en { color: #4a5968; }
-  .word-type { font-family: "Roboto Mono", Consolas, "Liberation Mono", monospace; background: #f6f8fb; border: 1px solid #e6eaf0; border-radius: 6px; padding: 2px 6px; }
-  .word-req { font-size: 11px; border-radius: 6px; padding: 0 6px; border: 1px solid #e5eaf2; color: #41566a; background: #f3f6fb; }
+  .word-type { font-family: "Roboto Mono", Consolas, "Liberation Mono", monospace; background: #f6f8fb; border: 1px solid #e6eaf0; border-radius: 6px; padding: 2px 6px; color: #203040; }
+  .word-req { font-size: 10pt; border-radius: 6px; padding: 1px 6px; border: 1px solid #e5eaf2; color: #41566a; background: #f3f6fb; }
   .word-req.word-req-required { color: #0b5325; background: #ecfdf5; border-color: #a7f3d0; }
   .word-req.word-req-conditional { color: #7c3b02; background: #fff7ed; border-color: #fed7aa; }
   .word-req.word-req-optional { color: #41566a; background: #f3f6fb; border-color: #e5eaf2; }
-  .word-l { font-size: 11px; border-radius: 6px; padding: 0 6px; background: #fff7ed; border: 1px solid #fed7aa; color: #7c3b02; }
-  .word-badge { font-size: 11px; border-radius: 6px; padding: 0 6px; display: inline-block; margin-right: 8px; margin-bottom: 4px; }
+  .word-l { font-size: 10pt; border-radius: 6px; padding: 1px 6px; background: #fff7ed; border: 1px solid #fed7aa; color: #7c3b02; }
+  .word-badge { font-size: 10pt; border-radius: 6px; padding: 1px 6px; display: inline-block; margin-right: 8px; margin-bottom: 4px; }
   .word-badge.filter { background: #fff7ed; border: 1px solid #fed7aa; color: #7c3b02; }
   .word-badge.override { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
 `;
+
+function hslToRgb(h, s, l){
+  const hue = ((h % 360) + 360) % 360;
+  const sat = Math.max(0, Math.min(100, s)) / 100;
+  const light = Math.max(0, Math.min(100, l)) / 100;
+  if(sat === 0){
+    const gray = Math.round(light * 255);
+    return { r: gray, g: gray, b: gray };
+  }
+  const c = (1 - Math.abs(2 * light - 1)) * sat;
+  const hPrime = hue / 60;
+  const x = c * (1 - Math.abs((hPrime % 2) - 1));
+  let r1 = 0, g1 = 0, b1 = 0;
+  if(hPrime >= 0 && hPrime < 1){ [r1, g1, b1] = [c, x, 0]; }
+  else if(hPrime >= 1 && hPrime < 2){ [r1, g1, b1] = [x, c, 0]; }
+  else if(hPrime >= 2 && hPrime < 3){ [r1, g1, b1] = [0, c, x]; }
+  else if(hPrime >= 3 && hPrime < 4){ [r1, g1, b1] = [0, x, c]; }
+  else if(hPrime >= 4 && hPrime < 5){ [r1, g1, b1] = [x, 0, c]; }
+  else { [r1, g1, b1] = [c, 0, x]; }
+  const m = light - c / 2;
+  const r = Math.round((r1 + m) * 255);
+  const g = Math.round((g1 + m) * 255);
+  const b = Math.round((b1 + m) * 255);
+  return { r, g, b };
+}
+
+function blendRgbWithWhite({ r, g, b }, alpha){
+  const a = Math.max(0, Math.min(1, alpha));
+  const mix = (channel)=> Math.round(channel * a + 255 * (1 - a));
+  return { r: mix(r), g: mix(g), b: mix(b) };
+}
+
+function rgbToHex({ r, g, b }){
+  const hex = (channel)=> channel.toString(16).padStart(2, '0');
+  return `#${hex(r)}${hex(g)}${hex(b)}`;
+}
+
+function branchBackgroundHex(branchIdx, depth){
+  const hue = BRANCH_HUES[Math.max(0, branchIdx) % BRANCH_HUES.length];
+  const sat = satFor(depth);
+  const light = lightFor(depth);
+  const base = hslToRgb(hue, sat, light);
+  const blended = blendRgbWithWhite(base, 0.92);
+  return rgbToHex(blended);
+}
 
 function exportWordCurrentTree(){
   const model = filteredTree();
@@ -2291,102 +2337,74 @@ function exportWordCurrentTree(){
     return;
   }
 
-  const doc = document.implementation.createHTMLDocument('');
-  doc.documentElement.lang = 'ru';
-  doc.body.style.margin = '0';
-  doc.body.style.fontFamily = '"Segoe UI", Arial, sans-serif';
-  doc.body.style.fontSize = '12pt';
-  doc.body.style.color = '#0f1720';
-  doc.body.style.lineHeight = '1.35';
-
-  const style = doc.createElement('style');
-  style.textContent = WORD_EXPORT_STYLES;
-  doc.head.appendChild(style);
-
-  const treeEl = buildWordExportTree(doc, model);
-  doc.body.appendChild(treeEl);
-
-  const html = '<!DOCTYPE html>' + doc.documentElement.outerHTML;
+  const html = buildWordExportDocument(model);
   const blob = window.htmlDocx.asBlob(html);
   const name = `${exportBaseName()}__${ts_hyphen()}.docx`;
   downloadBlob(name, blob);
 }
 
-function buildWordExportTree(doc, root){
-  const container = doc.createElement('div');
-  container.className = 'word-tree';
+function buildWordExportDocument(root){
+  const body = buildWordExportBody(root);
+  return `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"/><style>${WORD_EXPORT_STYLES}</style></head><body><div class="word-tree">${body}</div></body></html>`;
+}
+
+function buildWordExportBody(root){
   let firstRow = true;
+  const rows = [];
 
   const render = (node)=>{
-    const row = doc.createElement('div');
-    row.className = 'word-row';
-    row.style.padding = '6px 10px';
-    row.style.pageBreakInside = 'avoid';
-    row.style.borderTop = firstRow ? 'none' : '1px solid #f3f6fb';
-    firstRow = false;
-
     const depth = depthOf(node);
-    if(state.view.colorLevels){
-      const branchIdx = Math.max(0, (node._branch ?? 0));
-      const hue = BRANCH_HUES[branchIdx % BRANCH_HUES.length];
-      const S = satFor(depth);
-      const L = lightFor(depth);
-      row.style.backgroundColor = `hsla(${hue}, ${S}%, ${L}%, .92)`;
-    }else{
-      row.style.backgroundColor = '#ffffff';
-    }
-
-    const content = doc.createElement('div');
-    content.className = 'word-content';
-    content.style.marginLeft = `${depth*20}px`;
-
-    const appendPart = (className, text)=>{
-      if(text==null || text==='') return null;
-      const span = doc.createElement('span');
-      span.className = `word-part ${className}`.trim();
-      span.textContent = text;
-      span.style.display = 'inline-block';
-      span.style.marginRight = '8px';
-      span.style.marginBottom = '4px';
-      content.appendChild(span);
-      return span;
+    const parts = [];
+    const pushPart = (className, text)=>{
+      if(text==null || text==='') return;
+      parts.push(`<span class="word-part ${className}">${escapeHtml(String(text))}</span>`);
     };
 
     const hasRU = !!(node.nameRU && node.nameRU.trim());
     if(state.view.showRU && hasRU){
-      appendPart('word-name-ru', node.nameRU.trim());
+      pushPart('word-name-ru', node.nameRU.trim());
     }
     if(state.view.showEN && node.nameEN){
-      appendPart('word-name-en', `• ${node.nameEN}`);
+      pushPart('word-name-en', `• ${node.nameEN}`);
     }
     if(state.view.showType && node.type){
-      appendPart('word-type', node.type);
+      pushPart('word-type', node.type);
     }
     if(state.view.showReq){
       const reqKind = node.req || 'optional';
       const reqText = reqKind==='required' ? 'Обяз.' : (reqKind==='conditional' ? 'Условно' : 'Необяз.');
-      appendPart(`word-req word-req-${reqKind}`, reqText);
+      pushPart(`word-req word-req-${reqKind}`, reqText);
     }
     if(state.view.showL){
-      appendPart('word-l', 'L' + depth);
+      pushPart('word-l', 'L' + depth);
     }
 
     if(node._filteredCollapse){
-      appendPart('word-badge filter', 'Свернуто фильтром');
+      pushPart('word-badge filter', 'Свернуто фильтром');
       const hiddenRows = countHiddenRowsForFilteredNode(node._id);
-      appendPart('word-badge filter', `Скрыто строк: ${hiddenRows}`);
+      pushPart('word-badge filter', `Скрыто строк: ${hiddenRows}`);
     }else if(state.filterOverrides.has(node._id)){
-      appendPart('word-badge override', 'Переопределено');
+      pushPart('word-badge override', 'Переопределено');
     }
 
-    row.appendChild(content);
-    container.appendChild(row);
+    const borderStyle = firstRow ? 'border-top: none;' : 'border-top: 1px solid #f3f6fb;';
+    firstRow = false;
+
+    let background = '#ffffff';
+    if(state.view.colorLevels){
+      const branchIdx = Math.max(0, (node._branch ?? 0));
+      background = branchBackgroundHex(branchIdx, depth);
+    }
+
+    rows.push(
+      `<div class="word-row" style="${borderStyle} background-color: ${background};"><div class="word-content" style="margin-left: ${depth*20}px;">${parts.join('')}</div></div>`
+    );
 
     (node.children||[]).forEach(child => render(child));
   };
 
   render(root);
-  return container;
+  return rows.join('');
 }
 
 // Экспорт текущего видимого дерева в CSV (UTF-8+BOM, sep=;, CRLF)
