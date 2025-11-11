@@ -144,6 +144,7 @@
 
   #block-view{margin-bottom:12px;}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.4.1/dist/html-docx.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -253,7 +254,8 @@
   <div class="line" style="margin-top:12px"></div>
   <div class="settings-row" id="exportSection" style="margin:8px 0; flex-wrap:wrap; gap:8px">
     <button class="btn" data-dl="txt">Экспорт TXT</button>
-<button class="btn" data-dl="csv">Экспорт Excel (CSV)</button>
+    <button class="btn" data-dl="csv">Экспорт Excel (CSV)</button>
+    <button class="btn" data-dl="word">Экспорт в Word</button>
 
     <button class="btn" data-dl="snap-save">Сохранить snapshot</button>
     <button class="btn" data-dl="snap-load">Загрузить snapshot</button>
@@ -663,6 +665,7 @@ document.addEventListener('click',(e)=>{
   if(all){ toggleBlock(all,true); renderModel(); }
   if(none){ toggleBlock(none,false); renderModel(); }
   if (dl === 'csv') { exportCsvCurrentTree(); return; }
+  if (dl === 'word') { exportWordCurrentTree(); return; }
   if(dl) handleDownloadAction(dl);
 });
 function toggleBlock(block, val){
@@ -2256,6 +2259,135 @@ function rebuildAfterConfigChange(){
 
 
 
+
+const WORD_EXPORT_STYLES = `
+  .word-tree { width: 100%; }
+  .word-row { padding: 6px 10px; border-top: 1px solid #f3f6fb; page-break-inside: avoid; }
+  .word-row:first-child { border-top: none; }
+  .word-content { margin-left: 0; }
+  .word-part { display: inline-block; margin-right: 8px; margin-bottom: 4px; }
+  .word-name-ru { font-weight: 600; color: #16242c; }
+  .word-name-en { color: #4a5968; }
+  .word-type { font-family: "Roboto Mono", Consolas, "Liberation Mono", monospace; background: #f6f8fb; border: 1px solid #e6eaf0; border-radius: 6px; padding: 2px 6px; }
+  .word-req { font-size: 11px; border-radius: 6px; padding: 0 6px; border: 1px solid #e5eaf2; color: #41566a; background: #f3f6fb; }
+  .word-req.word-req-required { color: #0b5325; background: #ecfdf5; border-color: #a7f3d0; }
+  .word-req.word-req-conditional { color: #7c3b02; background: #fff7ed; border-color: #fed7aa; }
+  .word-req.word-req-optional { color: #41566a; background: #f3f6fb; border-color: #e5eaf2; }
+  .word-l { font-size: 11px; border-radius: 6px; padding: 0 6px; background: #fff7ed; border: 1px solid #fed7aa; color: #7c3b02; }
+  .word-badge { font-size: 11px; border-radius: 6px; padding: 0 6px; display: inline-block; margin-right: 8px; margin-bottom: 4px; }
+  .word-badge.filter { background: #fff7ed; border: 1px solid #fed7aa; color: #7c3b02; }
+  .word-badge.override { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+`;
+
+function exportWordCurrentTree(){
+  const model = filteredTree();
+  if(!model){
+    if (typeof showToast === 'function') showToast('Нет данных для экспорта');
+    return;
+  }
+  if(!window.htmlDocx || typeof window.htmlDocx.asBlob !== 'function'){
+    console.warn('html-docx-js is not available');
+    if (typeof showToast === 'function') showToast('Экспорт в Word недоступен');
+    return;
+  }
+
+  const doc = document.implementation.createHTMLDocument('');
+  doc.documentElement.lang = 'ru';
+  doc.body.style.margin = '0';
+  doc.body.style.fontFamily = '"Segoe UI", Arial, sans-serif';
+  doc.body.style.fontSize = '12pt';
+  doc.body.style.color = '#0f1720';
+  doc.body.style.lineHeight = '1.35';
+
+  const style = doc.createElement('style');
+  style.textContent = WORD_EXPORT_STYLES;
+  doc.head.appendChild(style);
+
+  const treeEl = buildWordExportTree(doc, model);
+  doc.body.appendChild(treeEl);
+
+  const html = '<!DOCTYPE html>' + doc.documentElement.outerHTML;
+  const blob = window.htmlDocx.asBlob(html);
+  const name = `${exportBaseName()}__${ts_hyphen()}.docx`;
+  downloadBlob(name, blob);
+}
+
+function buildWordExportTree(doc, root){
+  const container = doc.createElement('div');
+  container.className = 'word-tree';
+  let firstRow = true;
+
+  const render = (node)=>{
+    const row = doc.createElement('div');
+    row.className = 'word-row';
+    row.style.padding = '6px 10px';
+    row.style.pageBreakInside = 'avoid';
+    row.style.borderTop = firstRow ? 'none' : '1px solid #f3f6fb';
+    firstRow = false;
+
+    const depth = depthOf(node);
+    if(state.view.colorLevels){
+      const branchIdx = Math.max(0, (node._branch ?? 0));
+      const hue = BRANCH_HUES[branchIdx % BRANCH_HUES.length];
+      const S = satFor(depth);
+      const L = lightFor(depth);
+      row.style.backgroundColor = `hsla(${hue}, ${S}%, ${L}%, .92)`;
+    }else{
+      row.style.backgroundColor = '#ffffff';
+    }
+
+    const content = doc.createElement('div');
+    content.className = 'word-content';
+    content.style.marginLeft = `${depth*20}px`;
+
+    const appendPart = (className, text)=>{
+      if(text==null || text==='') return null;
+      const span = doc.createElement('span');
+      span.className = `word-part ${className}`.trim();
+      span.textContent = text;
+      span.style.display = 'inline-block';
+      span.style.marginRight = '8px';
+      span.style.marginBottom = '4px';
+      content.appendChild(span);
+      return span;
+    };
+
+    const hasRU = !!(node.nameRU && node.nameRU.trim());
+    if(state.view.showRU && hasRU){
+      appendPart('word-name-ru', node.nameRU.trim());
+    }
+    if(state.view.showEN && node.nameEN){
+      appendPart('word-name-en', `• ${node.nameEN}`);
+    }
+    if(state.view.showType && node.type){
+      appendPart('word-type', node.type);
+    }
+    if(state.view.showReq){
+      const reqKind = node.req || 'optional';
+      const reqText = reqKind==='required' ? 'Обяз.' : (reqKind==='conditional' ? 'Условно' : 'Необяз.');
+      appendPart(`word-req word-req-${reqKind}`, reqText);
+    }
+    if(state.view.showL){
+      appendPart('word-l', 'L' + depth);
+    }
+
+    if(node._filteredCollapse){
+      appendPart('word-badge filter', 'Свернуто фильтром');
+      const hiddenRows = countHiddenRowsForFilteredNode(node._id);
+      appendPart('word-badge filter', `Скрыто строк: ${hiddenRows}`);
+    }else if(state.filterOverrides.has(node._id)){
+      appendPart('word-badge override', 'Переопределено');
+    }
+
+    row.appendChild(content);
+    container.appendChild(row);
+
+    (node.children||[]).forEach(child => render(child));
+  };
+
+  render(root);
+  return container;
+}
 
 // Экспорт текущего видимого дерева в CSV (UTF-8+BOM, sep=;, CRLF)
 function exportCsvCurrentTree(){
