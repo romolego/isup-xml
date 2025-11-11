@@ -2262,23 +2262,31 @@ function rebuildAfterConfigChange(){
 
 const WORD_EXPORT_STYLES = `
   body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; font-size: 12pt; color: #0f1720; line-height: 1.35; }
-  .word-tree { width: 100%; }
-  .word-row { padding: 6px 10px; border-top: 1px solid #f3f6fb; page-break-inside: avoid; }
-  .word-row:first-child { border-top: none; }
-  .word-content { margin-left: 0; }
-  .word-part { display: inline-block; margin-right: 8px; margin-bottom: 4px; }
-  .word-name-ru { font-weight: 600; color: #16242c; }
-  .word-name-en { color: #4a5968; }
-  .word-type { font-family: "Roboto Mono", Consolas, "Liberation Mono", monospace; background: #f6f8fb; border: 1px solid #e6eaf0; border-radius: 6px; padding: 2px 6px; }
-  .word-req { font-size: 11px; border-radius: 6px; padding: 0 6px; border: 1px solid #e5eaf2; color: #41566a; background: #f3f6fb; }
-  .word-req.word-req-required { color: #0b5325; background: #ecfdf5; border-color: #a7f3d0; }
-  .word-req.word-req-conditional { color: #7c3b02; background: #fff7ed; border-color: #fed7aa; }
-  .word-req.word-req-optional { color: #41566a; background: #f3f6fb; border-color: #e5eaf2; }
-  .word-l { font-size: 11px; border-radius: 6px; padding: 0 6px; background: #fff7ed; border: 1px solid #fed7aa; color: #7c3b02; }
-  .word-badge { font-size: 11px; border-radius: 6px; padding: 0 6px; display: inline-block; margin-right: 8px; margin-bottom: 4px; }
-  .word-badge.filter { background: #fff7ed; border: 1px solid #fed7aa; color: #7c3b02; }
-  .word-badge.override { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
 `;
+
+const WORD_EXPORT_STYLE_PRESETS = {
+  tree: 'width: 100%;',
+  row: 'padding: 6px 10px; border-top: 1px solid #f3f6fb; page-break-inside: avoid;',
+  rowFirst: 'border-top: none;',
+  content: 'margin-left: 0; display: block;',
+  part: 'display: inline-block; margin-right: 8px; margin-bottom: 4px;',
+  nameRU: 'font-weight: 600; color: #16242c;',
+  nameEN: 'color: #4a5968;',
+  type: 'font-family: "Roboto Mono", Consolas, "Liberation Mono", monospace; background: #f6f8fb; border: 1px solid #e6eaf0; border-radius: 6px; padding: 2px 6px;',
+  reqBase: 'font-size: 11px; border-radius: 6px; padding: 0 6px; border: 1px solid #e5eaf2; color: #41566a; background: #f3f6fb;',
+  reqRequired: 'color: #0b5325; background: #ecfdf5; border-color: #a7f3d0;',
+  reqConditional: 'color: #7c3b02; background: #fff7ed; border-color: #fed7aa;',
+  reqOptional: '',
+  level: 'font-size: 11px; border-radius: 6px; padding: 0 6px; background: #fff7ed; border: 1px solid #fed7aa; color: #7c3b02;',
+  badgeBase: 'font-size: 11px; border-radius: 6px; padding: 0 6px; display: inline-block; margin-right: 8px; margin-bottom: 4px;',
+  badgeFilter: 'background: #fff7ed; border: 1px solid #fed7aa; color: #7c3b02;',
+  badgeOverride: 'background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46;'
+};
+
+function wordStyle(keys){
+  if(!Array.isArray(keys)) keys=[keys];
+  return keys.map(k=> WORD_EXPORT_STYLE_PRESETS[k] || '').filter(Boolean).join(' ');
+}
 
 function exportWordCurrentTree(){
   const model = filteredTree();
@@ -2300,7 +2308,8 @@ function exportWordCurrentTree(){
 
 function buildWordExportDocument(root){
   const body = buildWordExportBody(root);
-  return `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"/><style>${WORD_EXPORT_STYLES}</style></head><body><div class="word-tree">${body}</div></body></html>`;
+  const treeStyle = wordStyle('tree');
+  return `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"/><style>${WORD_EXPORT_STYLES}</style></head><body><div style="${treeStyle}">${body}</div></body></html>`;
 }
 
 function buildWordExportBody(root){
@@ -2310,59 +2319,109 @@ function buildWordExportBody(root){
   const render = (node)=>{
     const depth = depthOf(node);
     const parts = [];
-    const pushPart = (className, text)=>{
+    const pushPart = (styleKeys, text)=>{
       if(text==null || text==='') return;
-      parts.push(`<span class="word-part ${className}">${escapeHtml(String(text))}</span>`);
+      const keys = Array.isArray(styleKeys) ? styleKeys : [styleKeys];
+      const style = wordStyle(['part', ...keys]);
+      parts.push(`<span style="${style}">${escapeHtml(String(text))}</span>`);
     };
 
     const hasRU = !!(node.nameRU && node.nameRU.trim());
     if(state.view.showRU && hasRU){
-      pushPart('word-name-ru', node.nameRU.trim());
+      pushPart(['nameRU'], node.nameRU.trim());
     }
     if(state.view.showEN && node.nameEN){
-      pushPart('word-name-en', `• ${node.nameEN}`);
+      pushPart(['nameEN'], `• ${node.nameEN}`);
     }
     if(state.view.showType && node.type){
-      pushPart('word-type', node.type);
+      pushPart(['type'], node.type);
     }
     if(state.view.showReq){
       const reqKind = node.req || 'optional';
       const reqText = reqKind==='required' ? 'Обяз.' : (reqKind==='conditional' ? 'Условно' : 'Необяз.');
-      pushPart(`word-req word-req-${reqKind}`, reqText);
+      const reqStyle = reqKind==='required' ? 'reqRequired' : (reqKind==='conditional' ? 'reqConditional' : 'reqOptional');
+      pushPart(['reqBase', reqStyle], reqText);
     }
     if(state.view.showL){
-      pushPart('word-l', 'L' + depth);
+      pushPart(['level'], 'L' + depth);
     }
 
     if(node._filteredCollapse){
-      pushPart('word-badge filter', 'Свернуто фильтром');
+      pushPart(['badgeBase', 'badgeFilter'], 'Свернуто фильтром');
       const hiddenRows = countHiddenRowsForFilteredNode(node._id);
-      pushPart('word-badge filter', `Скрыто строк: ${hiddenRows}`);
+      pushPart(['badgeBase', 'badgeFilter'], `Скрыто строк: ${hiddenRows}`);
     }else if(state.filterOverrides.has(node._id)){
-      pushPart('word-badge override', 'Переопределено');
+      pushPart(['badgeBase', 'badgeOverride'], 'Переопределено');
     }
 
-    const borderStyle = firstRow ? 'border-top: none;' : 'border-top: 1px solid #f3f6fb;';
+    let rowStyle = wordStyle('row');
+    if(firstRow){
+      rowStyle += ' ' + wordStyle('rowFirst');
+    }
     firstRow = false;
 
-    let background = '#ffffff';
-    if(state.view.colorLevels){
-      const branchIdx = Math.max(0, (node._branch ?? 0));
-      const hue = BRANCH_HUES[branchIdx % BRANCH_HUES.length];
-      const S = satFor(depth);
-      const L = lightFor(depth);
-      background = `hsla(${hue}, ${S}%, ${L}%, .92)`;
-    }
+    const background = state.view.colorLevels
+      ? wordRowBackgroundColor(depth, Math.max(0, (node._branch ?? 0)))
+      : 'transparent';
 
-    rows.push(
-      `<div class="word-row" style="${borderStyle} background-color: ${background};"><div class="word-content" style="margin-left: ${depth*20}px;">${parts.join('')}</div></div>`
-    );
+    rowStyle += ` background-color: ${background};`;
+    const contentStyle = wordStyle('content') + ` margin-left: ${depth*20}px;`;
+
+    rows.push(`<div style="${rowStyle}"><div style="${contentStyle}">${parts.join('')}</div></div>`);
 
     (node.children||[]).forEach(child => render(child));
   };
 
   render(root);
   return rows.join('');
+}
+
+function wordRowBackgroundColor(depth, branchIdx){
+  const hue = BRANCH_HUES[branchIdx % BRANCH_HUES.length];
+  const S = satFor(depth);
+  const L = lightFor(depth);
+  return hslToHexBlendedWithWhite(hue, S, L, 0.92);
+}
+
+function hslToHexBlendedWithWhite(h, s, l, alpha){
+  const rgb = hslToRgb(h, s, l);
+  const blended = blendRgbWithWhite(rgb, alpha);
+  return rgbToHex(blended.r, blended.g, blended.b);
+}
+
+function hslToRgb(h, s, l){
+  const hue = ((h % 360) + 360) % 360;
+  const sat = Math.max(0, Math.min(100, s)) / 100;
+  const light = Math.max(0, Math.min(100, l)) / 100;
+  const c = (1 - Math.abs(2 * light - 1)) * sat;
+  const hp = hue / 60;
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  let r1 = 0, g1 = 0, b1 = 0;
+  if(hp >= 0 && hp < 1){ r1 = c; g1 = x; }
+  else if(hp < 2){ r1 = x; g1 = c; }
+  else if(hp < 3){ g1 = c; b1 = x; }
+  else if(hp < 4){ g1 = x; b1 = c; }
+  else if(hp < 5){ r1 = x; b1 = c; }
+  else { r1 = c; b1 = x; }
+  const m = light - c / 2;
+  return {
+    r: Math.round((r1 + m) * 255),
+    g: Math.round((g1 + m) * 255),
+    b: Math.round((b1 + m) * 255)
+  };
+}
+
+function blendRgbWithWhite(rgb, alpha){
+  const a = Math.max(0, Math.min(1, alpha == null ? 1 : alpha));
+  const mix = (channel) => Math.round((1 - a) * 255 + a * channel);
+  return { r: mix(rgb.r), g: mix(rgb.g), b: mix(rgb.b) };
+}
+
+function rgbToHex(r, g, b){
+  return '#' + [r, g, b].map(v => {
+    const clamped = Math.max(0, Math.min(255, v|0));
+    return clamped.toString(16).padStart(2, '0');
+  }).join('');
 }
 
 // Экспорт текущего видимого дерева в CSV (UTF-8+BOM, sep=;, CRLF)
