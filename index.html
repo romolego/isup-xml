@@ -144,7 +144,7 @@
 
   #block-view{margin-bottom:12px;}
 </style>
-<script src="/html-docx.min.js"></script>
+<script src="html-docx.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -2261,6 +2261,7 @@ function rebuildAfterConfigChange(){
 
 
 const WORD_EXPORT_STYLES = `
+  body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; font-size: 12pt; color: #0f1720; line-height: 1.35; }
   .word-tree { width: 100%; }
   .word-row { padding: 6px 10px; border-top: 1px solid #f3f6fb; page-break-inside: avoid; }
   .word-row:first-child { border-top: none; }
@@ -2291,102 +2292,77 @@ function exportWordCurrentTree(){
     return;
   }
 
-  const doc = document.implementation.createHTMLDocument('');
-  doc.documentElement.lang = 'ru';
-  doc.body.style.margin = '0';
-  doc.body.style.fontFamily = '"Segoe UI", Arial, sans-serif';
-  doc.body.style.fontSize = '12pt';
-  doc.body.style.color = '#0f1720';
-  doc.body.style.lineHeight = '1.35';
-
-  const style = doc.createElement('style');
-  style.textContent = WORD_EXPORT_STYLES;
-  doc.head.appendChild(style);
-
-  const treeEl = buildWordExportTree(doc, model);
-  doc.body.appendChild(treeEl);
-
-  const html = '<!DOCTYPE html>' + doc.documentElement.outerHTML;
+  const html = buildWordExportDocument(model);
   const blob = window.htmlDocx.asBlob(html);
   const name = `${exportBaseName()}__${ts_hyphen()}.docx`;
   downloadBlob(name, blob);
 }
 
-function buildWordExportTree(doc, root){
-  const container = doc.createElement('div');
-  container.className = 'word-tree';
+function buildWordExportDocument(root){
+  const body = buildWordExportBody(root);
+  return `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"/><style>${WORD_EXPORT_STYLES}</style></head><body><div class="word-tree">${body}</div></body></html>`;
+}
+
+function buildWordExportBody(root){
   let firstRow = true;
+  const rows = [];
 
   const render = (node)=>{
-    const row = doc.createElement('div');
-    row.className = 'word-row';
-    row.style.padding = '6px 10px';
-    row.style.pageBreakInside = 'avoid';
-    row.style.borderTop = firstRow ? 'none' : '1px solid #f3f6fb';
+    const depth = depthOf(node);
+    const parts = [];
+    const pushPart = (className, text)=>{
+      if(text==null || text==='') return;
+      parts.push(`<span class="word-part ${className}">${escapeHtml(String(text))}</span>`);
+    };
+
+    const hasRU = !!(node.nameRU && node.nameRU.trim());
+    if(state.view.showRU && hasRU){
+      pushPart('word-name-ru', node.nameRU.trim());
+    }
+    if(state.view.showEN && node.nameEN){
+      pushPart('word-name-en', `• ${node.nameEN}`);
+    }
+    if(state.view.showType && node.type){
+      pushPart('word-type', node.type);
+    }
+    if(state.view.showReq){
+      const reqKind = node.req || 'optional';
+      const reqText = reqKind==='required' ? 'Обяз.' : (reqKind==='conditional' ? 'Условно' : 'Необяз.');
+      pushPart(`word-req word-req-${reqKind}`, reqText);
+    }
+    if(state.view.showL){
+      pushPart('word-l', 'L' + depth);
+    }
+
+    if(node._filteredCollapse){
+      pushPart('word-badge filter', 'Свернуто фильтром');
+      const hiddenRows = countHiddenRowsForFilteredNode(node._id);
+      pushPart('word-badge filter', `Скрыто строк: ${hiddenRows}`);
+    }else if(state.filterOverrides.has(node._id)){
+      pushPart('word-badge override', 'Переопределено');
+    }
+
+    const borderStyle = firstRow ? 'border-top: none;' : 'border-top: 1px solid #f3f6fb;';
     firstRow = false;
 
-    const depth = depthOf(node);
+    let background = '#ffffff';
     if(state.view.colorLevels){
       const branchIdx = Math.max(0, (node._branch ?? 0));
       const hue = BRANCH_HUES[branchIdx % BRANCH_HUES.length];
       const S = satFor(depth);
       const L = lightFor(depth);
-      row.style.backgroundColor = `hsla(${hue}, ${S}%, ${L}%, .92)`;
-    }else{
-      row.style.backgroundColor = '#ffffff';
+      background = `hsla(${hue}, ${S}%, ${L}%, .92)`;
     }
 
-    const content = doc.createElement('div');
-    content.className = 'word-content';
-    content.style.marginLeft = `${depth*20}px`;
-
-    const appendPart = (className, text)=>{
-      if(text==null || text==='') return null;
-      const span = doc.createElement('span');
-      span.className = `word-part ${className}`.trim();
-      span.textContent = text;
-      span.style.display = 'inline-block';
-      span.style.marginRight = '8px';
-      span.style.marginBottom = '4px';
-      content.appendChild(span);
-      return span;
-    };
-
-    const hasRU = !!(node.nameRU && node.nameRU.trim());
-    if(state.view.showRU && hasRU){
-      appendPart('word-name-ru', node.nameRU.trim());
-    }
-    if(state.view.showEN && node.nameEN){
-      appendPart('word-name-en', `• ${node.nameEN}`);
-    }
-    if(state.view.showType && node.type){
-      appendPart('word-type', node.type);
-    }
-    if(state.view.showReq){
-      const reqKind = node.req || 'optional';
-      const reqText = reqKind==='required' ? 'Обяз.' : (reqKind==='conditional' ? 'Условно' : 'Необяз.');
-      appendPart(`word-req word-req-${reqKind}`, reqText);
-    }
-    if(state.view.showL){
-      appendPart('word-l', 'L' + depth);
-    }
-
-    if(node._filteredCollapse){
-      appendPart('word-badge filter', 'Свернуто фильтром');
-      const hiddenRows = countHiddenRowsForFilteredNode(node._id);
-      appendPart('word-badge filter', `Скрыто строк: ${hiddenRows}`);
-    }else if(state.filterOverrides.has(node._id)){
-      appendPart('word-badge override', 'Переопределено');
-    }
-
-    row.appendChild(content);
-    container.appendChild(row);
+    rows.push(
+      `<div class="word-row" style="${borderStyle} background-color: ${background};"><div class="word-content" style="margin-left: ${depth*20}px;">${parts.join('')}</div></div>`
+    );
 
     (node.children||[]).forEach(child => render(child));
   };
 
   render(root);
-  return container;
+  return rows.join('');
 }
 
 // Экспорт текущего видимого дерева в CSV (UTF-8+BOM, sep=;, CRLF)
