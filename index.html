@@ -132,11 +132,12 @@
 
   .row[aria-selected="true"]{outline:2px solid #96e1c5; outline-offset:-2px; background:#f3fbf7}
 
-  .card{position:fixed; z-index:1000; min-width:340px; max-width:520px; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:10px 12px; display:none}
+  .card{position:fixed; z-index:1000; min-width:340px; max-width:520px; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); padding:10px 12px; display:none; word-break:break-word; overflow-wrap:anywhere;}
   .card h4{margin:0 0 8px; font-size:14px}
-  .kv{display:grid; grid-template-columns:140px 1fr; gap:6px 10px; font-size:13px}
+  .kv{display:grid; grid-template-columns:140px 1fr; gap:6px 10px; font-size:13px; word-break:inherit; overflow-wrap:inherit;}
   .kv .k{color:#5a6775}
-  .kv .v code{font-family:var(--mono)}
+  .kv .v{word-break:inherit; overflow-wrap:inherit;}
+  .kv .v code{font-family:var(--mono); white-space:normal; word-break:inherit; overflow-wrap:inherit;}
   .card .actions{display:flex; gap:6px; margin-top:8px}
   .card .type-link{color:#0b4f3b; text-decoration:underline; cursor:pointer}
   .card::after{content:""; position:absolute; width:10px; height:10px; background:#fff; transform:rotate(45deg); border-left:1px solid var(--line); border-top:1px solid var(--line)}
@@ -149,6 +150,17 @@
   dialog th, dialog td{border:1px solid #e6e9ee; padding:6px 8px; text-align:left; vertical-align:top}
   dialog th{background:#f7f9fc; font-weight:600}
   dialog .dlg-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:12px}
+  .dlg-header{display:flex; align-items:center; justify-content:space-between; gap:12px; margin:-4px -4px 10px; padding:4px;}
+  .dlg-close{border:none; background:transparent; color:#4a5968; cursor:pointer; font-size:18px; line-height:1; padding:6px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center;}
+  .dlg-close:hover{background:var(--hover)}
+  .word-export-grid{display:grid; gap:14px; margin-top:6px;}
+  .word-section{display:grid; gap:8px;}
+  .word-section .title{font-weight:600; color:#253446;}
+  .word-margins{display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(120px,1fr));}
+  .word-row{display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); align-items:flex-end;}
+  .word-row .field, .word-margins .field{display:grid; gap:6px;}
+  .word-row input, .word-row select{padding:6px 8px; border:1px solid #cfd6df; border-radius:6px; background:#f9fbff; font:13px/1.35 var(--sans); color:#203040;}
+  .word-row input:focus, .word-row select:focus{outline:2px solid #a7f3d0; outline-offset:1px;}
 
   .sign-slice{ display:flex; align-items:center; gap:12px; margin:14px 0; padding:10px 12px; border:1px solid #e6e9ee; border-radius:10px; background:#ffffff; flex-wrap:wrap; }
   .sign-slice input[type="text"]{ flex:0 0 220px; max-width:100%; padding:6px 8px; border:1px solid #cfd6df; border-radius:6px; font:13px/1.35 var(--mono); color:#203040; background:#f9fbff; }
@@ -317,9 +329,53 @@
 <div class="toast" id="toast">—</div>
 
 <dialog id="reportDlg">
-  <h3 style="margin:0 0 8px">Отчёт по загруженным схемам</h3>
+  <div class="dlg-header">
+    <h3 style="margin:0">Отчёт по загруженным схемам</h3>
+    <button class="dlg-close" id="reportCloseTop" aria-label="Закрыть отчёт" title="Закрыть">&#10005;</button>
+  </div>
   <div id="reportBody"></div>
   <div class="dlg-actions"><button class="btn" id="reportClose">Закрыть</button></div>
+</dialog>
+
+<dialog id="wordExportDlg">
+  <div class="dlg-header">
+    <h3 style="margin:0">Параметры экспорта в Word</h3>
+  </div>
+  <div class="word-export-grid">
+    <div class="word-section">
+      <div class="title">Поля страницы (см)</div>
+      <div class="word-margins">
+        <label class="field">Верхнее<input type="number" step="0.1" min="0" id="wordMarginTop"></label>
+        <label class="field">Левое<input type="number" step="0.1" min="0" id="wordMarginLeft"></label>
+        <label class="field">Правое<input type="number" step="0.1" min="0" id="wordMarginRight"></label>
+        <label class="field">Нижнее<input type="number" step="0.1" min="0" id="wordMarginBottom"></label>
+      </div>
+    </div>
+
+    <div class="word-section">
+      <div class="word-row">
+        <label class="field">Размер шрифта, pt<input type="number" step="0.5" min="6" id="wordFontSize"></label>
+        <label class="field">Межстрочный интервал
+          <select id="wordLineSpacing">
+            <option value="1.0">1,0</option>
+            <option value="1.15">1,15</option>
+            <option value="1.5">1,5</option>
+            <option value="2.0">2,0</option>
+          </select>
+        </label>
+        <label class="field">Отступ после абзаца, pt<input type="number" step="0.5" min="0" id="wordParagraphSpacing"></label>
+      </div>
+    </div>
+
+    <div class="word-section" style="gap:10px">
+      <label class="cb-inline"><input type="checkbox" id="wordHyphenation"> Отключить автоматические переносы слов (hyphenation)</label>
+      <label class="cb-inline"><input type="checkbox" id="wordPreserveColors"> Сохранять текущие цвета и отступы из дерева при экспорте</label>
+    </div>
+  </div>
+  <div class="dlg-actions" style="justify-content:space-between">
+    <button class="btn" id="wordExportCancel">Отмена</button>
+    <button class="btn primary" id="wordExportConfirm">Экспорт</button>
+  </div>
 </dialog>
 
 <dialog id="typicalCfgDlg">
@@ -632,7 +688,12 @@ const els={
   sliceInput:q('#sliceCode'),
   rootSelector:q('#rootSelector'),
   toast:q('#toast'),
-  reportBtn:q('#reportBtn'), reportDlg:q('#reportDlg'), reportClose:q('#reportClose'), reportBody:q('#reportBody'),
+  reportBtn:q('#reportBtn'), reportDlg:q('#reportDlg'), reportClose:q('#reportClose'), reportCloseTop:q('#reportCloseTop'), reportBody:q('#reportBody'),
+  wordExportDlg:q('#wordExportDlg'),
+  wordMarginTop:q('#wordMarginTop'), wordMarginRight:q('#wordMarginRight'), wordMarginBottom:q('#wordMarginBottom'), wordMarginLeft:q('#wordMarginLeft'),
+  wordFontSize:q('#wordFontSize'), wordLineSpacing:q('#wordLineSpacing'), wordParagraphSpacing:q('#wordParagraphSpacing'),
+  wordHyphenation:q('#wordHyphenation'), wordPreserveColors:q('#wordPreserveColors'),
+  wordExportCancel:q('#wordExportCancel'), wordExportConfirm:q('#wordExportConfirm'),
   fileInput:q('#fileInput'), parseBtn:q('#parseBtn'),
   serviceKeysRow:q('#serviceKeysRow'),
   typicalKeysRow:q('#typicalKeysRow'),
@@ -709,7 +770,7 @@ document.addEventListener('click',(e)=>{
   if(all){ toggleBlock(all,true); renderModel(); }
   if(none){ toggleBlock(none,false); renderModel(); }
   if (dl === 'csv') { exportCsvCurrentTree(); return; }
-  if (dl === 'word') { exportWordCurrentTree(); return; }
+  if (dl === 'word') { openWordExportDialog(); return; }
   if(dl) handleDownloadAction(dl);
 });
 function toggleBlock(block, val){
@@ -1991,13 +2052,65 @@ q('#reportBtn').addEventListener('click', ()=>{
   }
   q('#reportDlg').showModal();
 });
-q('#reportClose').addEventListener('click', ()=> q('#reportDlg').close());
+function closeReportDialog(){
+  els.reportDlg.close();
+}
+q('#reportClose').addEventListener('click', closeReportDialog);
+q('#reportCloseTop').addEventListener('click', closeReportDialog);
+els.reportDlg.addEventListener('click', (e)=>{
+  if(e.target === els.reportDlg) closeReportDialog();
+});
 
 function computeStats(root){
   const st={total:0,maxDepth:0};
   walk(root, n=>{ st.total++; const d=depthOf(n); if(d>st.maxDepth) st.maxDepth=d; });
   return st;
 }
+
+function openWordExportDialog(){
+  const cfg = normalizeWordExportSettings(lastWordExportSettings);
+  els.wordMarginTop.value = cfg.marginTop;
+  els.wordMarginRight.value = cfg.marginRight;
+  els.wordMarginBottom.value = cfg.marginBottom;
+  els.wordMarginLeft.value = cfg.marginLeft;
+  els.wordFontSize.value = cfg.fontSize;
+  els.wordLineSpacing.value = String(cfg.lineSpacing);
+  els.wordParagraphSpacing.value = cfg.paragraphSpacing;
+  els.wordHyphenation.checked = cfg.disableHyphenation;
+  els.wordPreserveColors.checked = cfg.preserveColors;
+  els.wordExportDlg.showModal();
+}
+
+function closeWordExportDialog(){
+  els.wordExportDlg.close();
+}
+
+function collectWordExportSettingsFromForm(){
+  return normalizeWordExportSettings({
+    marginTop: els.wordMarginTop.value,
+    marginRight: els.wordMarginRight.value,
+    marginBottom: els.wordMarginBottom.value,
+    marginLeft: els.wordMarginLeft.value,
+    fontSize: els.wordFontSize.value,
+    lineSpacing: els.wordLineSpacing.value,
+    paragraphSpacing: els.wordParagraphSpacing.value,
+    disableHyphenation: els.wordHyphenation.checked,
+    preserveColors: els.wordPreserveColors.checked
+  });
+}
+
+els.wordExportCancel.addEventListener('click', closeWordExportDialog);
+els.wordExportConfirm.addEventListener('click', ()=>{
+  const cfg = collectWordExportSettingsFromForm();
+  closeWordExportDialog();
+  exportWordCurrentTree(cfg);
+});
+(()=>{
+  const cfg = normalizeWordExportSettings(lastWordExportSettings);
+  lastWordExportSettings = cfg;
+  els.wordHyphenation.checked = cfg.disableHyphenation;
+  els.wordPreserveColors.checked = cfg.preserveColors;
+})();
 
 /* ========= Экспорт/импорт ========= */
 function handleDownloadAction(kind){
@@ -2468,35 +2581,82 @@ function rebuildAfterConfigChange(){
 
 
 
-const WORD_EXPORT_STYLES = `
-  body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; font-size: 12pt; color: #0f1720; line-height: 1.35; }
-`;
-
-const WORD_EXPORT_STYLE_PRESETS = {
-  tree: 'width: 100%;',
-  row: 'padding: 6px 10px; border-top: 1px solid #f3f6fb; page-break-inside: avoid;',
-  rowFirst: 'border-top: none;',
-  content: 'margin-left: 0; display: block;',
-  part: 'display: inline-block; margin-right: 8px; margin-bottom: 4px;',
-  nameRU: 'font-weight: 600; color: #16242c;',
-  nameEN: 'color: #4a5968;',
-  type: 'font-family: "Roboto Mono", Consolas, "Liberation Mono", monospace; background: #f6f8fb; border: 1px solid #e6eaf0; border-radius: 6px; padding: 2px 6px;',
-  reqBase: 'font-size: 11px; border-radius: 6px; padding: 0 6px; border: 1px solid #e5eaf2; color: #41566a; background: #f3f6fb;',
-  reqRequired: 'color: #0b5325; background: #ecfdf5; border-color: #a7f3d0;',
-  reqConditional: 'color: #7c3b02; background: #fff7ed; border-color: #fed7aa;',
-  reqOptional: '',
-  level: 'font-size: 11px; border-radius: 6px; padding: 0 6px; background: #fff7ed; border: 1px solid #fed7aa; color: #7c3b02;',
-  badgeBase: 'font-size: 11px; border-radius: 6px; padding: 0 6px; display: inline-block; margin-right: 8px; margin-bottom: 4px;',
-  badgeFilter: 'background: #fff7ed; border: 1px solid #fed7aa; color: #7c3b02;',
-  badgeOverride: 'background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46;'
+const DEFAULT_WORD_EXPORT_SETTINGS = {
+  marginTop: 1,
+  marginRight: 1,
+  marginBottom: 1,
+  marginLeft: 1,
+  fontSize: 12,
+  lineSpacing: 1.0,
+  paragraphSpacing: 0,
+  disableHyphenation: true,
+  preserveColors: true
 };
+let lastWordExportSettings = { ...DEFAULT_WORD_EXPORT_SETTINGS };
+let WORD_EXPORT_STYLE_PRESETS = buildWordStylePresets(DEFAULT_WORD_EXPORT_SETTINGS);
+
+function normalizeWordExportSettings(settings){
+  const num = (v, fallback, min=0)=>{
+    const n = parseFloat(v);
+    return Number.isFinite(n) && n >= min ? n : fallback;
+  };
+  const cfg = { ...DEFAULT_WORD_EXPORT_SETTINGS, ...(settings||{}) };
+  cfg.marginTop = num(cfg.marginTop, DEFAULT_WORD_EXPORT_SETTINGS.marginTop);
+  cfg.marginRight = num(cfg.marginRight, DEFAULT_WORD_EXPORT_SETTINGS.marginRight);
+  cfg.marginBottom = num(cfg.marginBottom, DEFAULT_WORD_EXPORT_SETTINGS.marginBottom);
+  cfg.marginLeft = num(cfg.marginLeft, DEFAULT_WORD_EXPORT_SETTINGS.marginLeft);
+  cfg.fontSize = num(cfg.fontSize, DEFAULT_WORD_EXPORT_SETTINGS.fontSize, 1);
+  cfg.lineSpacing = num(cfg.lineSpacing, DEFAULT_WORD_EXPORT_SETTINGS.lineSpacing, 0.5);
+  cfg.paragraphSpacing = num(cfg.paragraphSpacing, DEFAULT_WORD_EXPORT_SETTINGS.paragraphSpacing, 0);
+  cfg.disableHyphenation = !!cfg.disableHyphenation;
+  cfg.preserveColors = cfg.preserveColors !== false;
+  return cfg;
+}
+
+function buildWordExportStyles(options){
+  const hyphenation = options.disableHyphenation ? 'none' : 'auto';
+  return `
+    @page { margin: ${options.marginTop}cm ${options.marginRight}cm ${options.marginBottom}cm ${options.marginLeft}cm; }
+    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; font-size: ${options.fontSize}pt; color: #0f1720; line-height: ${options.lineSpacing}; hyphens: ${hyphenation}; }
+  `;
+}
+
+function buildWordStylePresets(options){
+  const baseText = '#0f1720';
+  const accentPrimary = options.preserveColors ? '#16242c' : baseText;
+  const muted = options.preserveColors ? '#4a5968' : '#364152';
+  const badgeBg = options.preserveColors ? '#fff7ed' : '#eef1f5';
+  const badgeBorder = options.preserveColors ? '#fed7aa' : '#d5dbe3';
+  const badgeText = options.preserveColors ? '#7c3b02' : baseText;
+  const reqBaseBg = options.preserveColors ? '#f3f6fb' : '#eef1f5';
+  const reqBaseBorder = options.preserveColors ? '#e5eaf2' : '#d5dbe3';
+
+  return {
+    tree: 'width: 100%;',
+    row: `padding: 6px 10px; border-top: 1px solid #f3f6fb; page-break-inside: avoid; margin-bottom: ${options.paragraphSpacing}pt;`,
+    rowFirst: 'border-top: none;',
+    content: 'margin-left: 0; display: block;',
+    part: 'display: inline-block; margin-right: 8px; margin-bottom: 4px;',
+    nameRU: `font-weight: 600; color: ${accentPrimary};`,
+    nameEN: `color: ${muted};`,
+    type: `font-family: "Roboto Mono", Consolas, "Liberation Mono", monospace; background: ${options.preserveColors ? '#f6f8fb' : '#f3f4f6'}; border: 1px solid ${options.preserveColors ? '#e6eaf0' : '#d5dbe3'}; border-radius: 6px; padding: 2px 6px; color: ${baseText};`,
+    reqBase: `font-size: 11px; border-radius: 6px; padding: 0 6px; border: 1px solid ${reqBaseBorder}; color: #41566a; background: ${reqBaseBg};`,
+    reqRequired: options.preserveColors ? 'color: #0b5325; background: #ecfdf5; border-color: #a7f3d0;' : 'color: #0f1f17; background: #e3f1e9; border-color: #b5dec8;',
+    reqConditional: `color: ${badgeText}; background: ${badgeBg}; border-color: ${badgeBorder};`,
+    reqOptional: '',
+    level: `font-size: 11px; border-radius: 6px; padding: 0 6px; background: ${badgeBg}; border: 1px solid ${badgeBorder}; color: ${badgeText};`,
+    badgeBase: `font-size: 11px; border-radius: 6px; padding: 0 6px; display: inline-block; margin-right: 8px; margin-bottom: 4px;`,
+    badgeFilter: `background: ${badgeBg}; border: 1px solid ${badgeBorder}; color: ${badgeText};`,
+    badgeOverride: options.preserveColors ? 'background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46;' : 'background: #e6f2ff; border: 1px solid #c4dcff; color: #0f3b6e;'
+  };
+}
 
 function wordStyle(keys){
   if(!Array.isArray(keys)) keys=[keys];
   return keys.map(k=> WORD_EXPORT_STYLE_PRESETS[k] || '').filter(Boolean).join(' ');
 }
 
-function exportWordCurrentTree(){
+function exportWordCurrentTree(options){
   const model = filteredTree();
   if(!model){
     if (typeof showToast === 'function') showToast('Нет данных для экспорта');
@@ -2508,19 +2668,23 @@ function exportWordCurrentTree(){
     return;
   }
 
-  const html = buildWordExportDocument(model);
+  const cfg = normalizeWordExportSettings(options || lastWordExportSettings);
+  lastWordExportSettings = cfg;
+  WORD_EXPORT_STYLE_PRESETS = buildWordStylePresets(cfg);
+  const html = buildWordExportDocument(model, cfg);
   const blob = window.htmlDocx.asBlob(html);
   const name = `${exportBaseName()}__${ts_hyphen()}.docx`;
   downloadBlob(name, blob);
 }
 
-function buildWordExportDocument(root){
-  const body = buildWordExportBody(root);
+function buildWordExportDocument(root, options){
+  const body = buildWordExportBody(root, options);
   const treeStyle = wordStyle('tree');
-  return `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"/><style>${WORD_EXPORT_STYLES}</style></head><body><div style="${treeStyle}">${body}</div></body></html>`;
+  const styles = buildWordExportStyles(options);
+  return `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"/><style>${styles}</style></head><body><div style="${treeStyle}">${body}</div></body></html>`;
 }
 
-function buildWordExportBody(root){
+function buildWordExportBody(root, options){
   let firstRow = true;
   const rows = [];
 
@@ -2568,7 +2732,7 @@ function buildWordExportBody(root){
     }
     firstRow = false;
 
-    const background = state.view.colorLevels
+    const background = options.preserveColors && state.view.colorLevels
       ? wordRowBackgroundColor(depth, Math.max(0, (node._branch ?? 0)))
       : 'transparent';
 
