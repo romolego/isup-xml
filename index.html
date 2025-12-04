@@ -1,4 +1,11 @@
 <!DOCTYPE html>
+<!--
+  CHANGELOG (кратко):
+  - NEW: выбор корневого элемента (UI select в блоке среза/ветки, pickRootElement/populateRootSelector/rebuildModelWithRoot).
+  - NEW: полное индексирование и резолв xs:group (buildXsdRepo/resolveGroup + expandParticle).
+  - MOD: явное разделение этапов «парсинг» (buildModelFromElement/expandComplexType/expandParticle) и «фильтрация» (filteredTree/applyTypicalGroupExpand/filterService).
+  - NEW: диагностика неразрешённых ссылок (diagMissing + отчёт renderReport). 
+-->
 <html lang="ru">
 <head>
 <meta charset="utf-8"/>
@@ -45,6 +52,10 @@
 
   .hint{color:var(--muted)}
   em{font-style:italic; color:#5a6a7a}
+  .diag-report{margin-top:10px; padding:10px 12px; border:1px solid #dbe3ec; border-radius:10px; background:#f9fbff;}
+  .diag-report ul{margin:6px 0 0 16px; padding:0;}
+  .diag-report li{margin-bottom:4px;}
+  .diag-report code{background:#eef2f7; padding:1px 4px; border-radius:4px;}
 
   /* метки чекбоксов: серые/жирные */
   label{ color:#5a6a7a; font-weight:400; }
@@ -141,12 +152,22 @@
 
   .sign-slice{ display:flex; align-items:center; gap:12px; margin:14px 0; padding:10px 12px; border:1px solid #e6e9ee; border-radius:10px; background:#ffffff; flex-wrap:wrap; }
   .sign-slice input[type="text"]{ flex:0 0 220px; max-width:100%; padding:6px 8px; border:1px solid #cfd6df; border-radius:6px; font:13px/1.35 var(--mono); color:#203040; background:#f9fbff; }
+  /* NEW: компактный выбор корневого элемента */
+  .root-select{display:flex; align-items:center; gap:6px; margin-left:6px; flex-wrap:wrap;}
+  .root-select select{padding:6px 8px; border:1px solid #cfd6df; border-radius:6px; background:#f9fbff; min-width:180px;}
 
   #block-view{margin-bottom:12px;}
 </style>
 <script src="html-docx.min.js"></script>
 </head>
 <body>
+<!--
+  Чек-лист изменений:
+  - NEW: выбор корневого элемента через выпадающий список в блоке среза/ветки.
+  - NEW: индексирование и резолв xs:group с разворачиванием содержимого в дерево.
+  - MOD: разделение этапов парсинга (полное дерево) и фильтрации (видимость/разворачивание).
+  - NEW: расширенная диагностика неразрешённых type/element/group с указанием источника ссылок.
+-->
 <div class="container">
 
   <div class="loader">
@@ -229,6 +250,11 @@
   <div class="sign-slice">
     <label class="cb-inline"><input type="checkbox" id="sliceToggle"> Показать только выбранную ветку</label>
     <input type="text" id="sliceCode" value="ActInfo">
+    <!-- NEW: выбор корневого элемента -->
+    <span class="root-select">
+      <span class="tiny">Построить дерево по</span>
+      <select id="rootSelector" class="mono"></select>
+    </span>
   </div>
 
   <div class="tree-controls">
@@ -373,11 +399,27 @@ const state={
   typicalCodes: loadTypicalCodes(),                    // []
   serviceAllCodes: loadServiceAllCodes(),              // []
   filterOverrides: new Set(loadJSON(LS_OVERRIDES, [])),
-  treeCompact: (localStorage.getItem(LS_TREE_COMPACT)==='true')
+  treeCompact: (localStorage.getItem(LS_TREE_COMPACT)==='true'),
+  selectedRootKey: ''                         // NEW: выбранный корень (QName)
 };
 state.slicePendingReapply = state.slice.method === 'code';
-
-const buildDiagnostics = { missingTypes: [], missingElements: [] , idXmlCount:0, idBusinessCount:0, unresolvedImports:[] };
+// NEW: расширенная диагностика резолвинга
+const buildDiagnostics = {
+  missingTypes: [], missingElements: [], missingGroups: [],
+  missingTypesDetailed: [], missingElementsDetailed: [], missingGroupsDetailed: [],
+  idXmlCount:0, idBusinessCount:0, unresolvedImports:[]
+};
+function resetBuildDiagnostics(){
+  buildDiagnostics.missingTypes.length = 0;
+  buildDiagnostics.missingElements.length = 0;
+  buildDiagnostics.missingGroups.length = 0;
+  buildDiagnostics.missingTypesDetailed.length = 0;
+  buildDiagnostics.missingElementsDetailed.length = 0;
+  buildDiagnostics.missingGroupsDetailed.length = 0;
+  buildDiagnostics.idXmlCount = 0;
+  buildDiagnostics.idBusinessCount = 0;
+  buildDiagnostics.unresolvedImports.length = 0;
+}
 
 /* ===================== Код-листы ===================== */
 function loadTypicalCodes(){
@@ -588,6 +630,7 @@ const els={
   autoDepth:q('#autoDepth'),
   sliceToggle:q('#sliceToggle'),
   sliceInput:q('#sliceCode'),
+  rootSelector:q('#rootSelector'),
   toast:q('#toast'),
   reportBtn:q('#reportBtn'), reportDlg:q('#reportDlg'), reportClose:q('#reportClose'), reportBody:q('#reportBody'),
   fileInput:q('#fileInput'), parseBtn:q('#parseBtn'),
@@ -608,6 +651,7 @@ const els={
   fltMenu:q('#fltMenu')
 };
 let _menuScroller = null;
+populateRootSelector(null, '');
 let _onScrollReposition = null;
 
 function _addMenuRepositioners(handler){
@@ -711,11 +755,26 @@ initSliceUI();
 
 /* ========= Разбор XSD ========= */
 els.parseBtn.addEventListener('click', parseFiles);
+if(els.rootSelector){
+  els.rootSelector.addEventListener('change', ()=>{
+    if(!state.repo) return;
+    const key=els.rootSelector.value;
+    const elRef = state.repo.elements.get(key);
+    if(elRef){
+      state.selectedRootKey = key;
+      rebuildModelWithRoot(elRef, {resetExpand:true});
+    }else{
+      showToast('Выбранный корень не найден в загруженных схемах');
+    }
+  });
+}
 
 async function parseFiles(){
   const files = Array.from(els.fileInput.files||[]);
   if(!files.length){ showToast('Выберите файлы XSD'); return; }
   showProgress(true);
+  resetBuildDiagnostics();
+  state.selectedRootKey='';
   try{
     const items = [];
     for(const file of files){
@@ -728,29 +787,10 @@ async function parseFiles(){
     const rootElem = pickRootElement(repo);
     if(!rootElem){ showToast('Не найден корневой глобальный элемент'); showProgress(false); return; }
 
-    const rootNode = buildModelFromElement(repo, rootElem);
-    annotateIdsPathsAndBranch(rootNode);
-    inferTypicalGroupContainers(rootNode);
-    annotateRequiredness(rootNode);
+    state.selectedRootKey = keyQL(rootElem.ns, rootElem.name);
+    populateRootSelector(repo, state.selectedRootKey);
 
-    state.modelRoot = rootNode;
-    if(state.slice.method==='code') state.slicePendingReapply = true;
-
-    /* Полное раскрытие по умолчанию */
-    state.expanded.clear();
-    state.expanded.add(state.modelRoot._id);
-    state.expandLevel = localStorage.getItem(LS_LEVEL) || 'all';
-    autoExpandToLevel();
-    if(state.slice.method==='code'){
-      const anchor = sliceAnchorFromState();
-      if(anchor){
-        const expanded = ensureAnchorPathExpanded(anchor);
-        if(expanded){ saveState(); }
-      }
-    }
-
-    refreshStatsFromRepo(repo, rootNode);
-    renderModel();
+    rebuildModelWithRoot(rootElem, {resetExpand:true});
   }catch(err){
     console.error(err);
     showToast('Ошибка разбора XSD');
@@ -777,14 +817,17 @@ function buildXsdRepo(items){
     return {name:basename, doc, schema, tns};
   });
 
-  const elements=new Map(), types=new Map(), byLocalElements=new Map(), byLocalTypes=new Map();
+  // NEW: индексирование xs:group + сохранение порядка глобальных элементов
+  const elements=new Map(), types=new Map(), groups=new Map();
+  const byLocalElements=new Map(), byLocalTypes=new Map(), byLocalGroups=new Map();
+  const globalElementsList=[];
   for(const d of docs){
     const xs=(sel)=>Array.from(d.schema.getElementsByTagNameNS(XS_NS, sel));
     for(const el of xs('element')){
       if(el.parentElement===d.schema){
         const name=el.getAttribute('name'); if(!name) continue;
         const key=keyQL(d.tns, name); const rec={doc:d,node:el,ns:d.tns,name};
-        elements.set(key, rec); pushMap(byLocalElements, name, rec);
+        elements.set(key, rec); pushMap(byLocalElements, name, rec); globalElementsList.push(rec);
       }
     }
     for(const ct of xs('complexType')){
@@ -799,6 +842,13 @@ function buildXsdRepo(items){
         const name=st.getAttribute('name'); if(!name) continue;
         const key=keyQL(d.tns, name); const rec={doc:d,node:st,ns:d.tns,name,simple:true};
         types.set(key, rec); pushMap(byLocalTypes, name, rec);
+      }
+    }
+    for(const g of xs('group')){
+      if(g.parentElement===d.schema){
+        const name=g.getAttribute('name'); if(!name) continue;
+        const key=keyQL(d.tns, name); const rec={doc:d,node:g,ns:d.tns,name};
+        groups.set(key, rec); pushMap(byLocalGroups, name, rec);
       }
     }
   }
@@ -816,13 +866,25 @@ function buildXsdRepo(items){
     }
   }
 
+  function diagMissing(kind, qn, ctx){
+    const ctxDoc = docs.find(d=>d.doc===ctx.ownerDocument);
+    const fromFile = ctxDoc ? ctxDoc.name : (ctx.baseURI||'');
+    const referer = ctx.getAttribute('name') || ctx.getAttribute('ref') || localName(ctx);
+    const shortKey = `missing${kind}s`;
+    const detailedKey = `missing${kind}sDetailed`;
+    const already = (buildDiagnostics[detailedKey]||[]).some(x=>x.qname===qn && x.fromFile===fromFile && x.referer===referer);
+    if(already) return;
+    if(buildDiagnostics[shortKey]) buildDiagnostics[shortKey].push(`${qn} @${fromFile}`);
+    if(buildDiagnostics[detailedKey]) buildDiagnostics[detailedKey].push({qname:qn, fromFile, referer});
+  }
+
   function resolveElement(ctx, qn){
     const {ns,local,pref}=splitQNameEx(ctx, qn);
     let key=keyQL(ns,local); if(elements.has(key)) return elements.get(key);
     const tail=tailOfNS(ns); if(tail && nsTailIndex.has(tail)){ key=keyQL(nsTailIndex.get(tail),local); if(elements.has(key)) return elements.get(key); }
     const base=guessBasenameFromPrefix(pref); if(base && basenameNsMap.has(base)){ key=keyQL(basenameNsMap.get(base),local); if(elements.has(key)) return elements.get(key); }
     const list=byLocalElements.get(local)||[]; if(list.length===1) return list[0];
-    buildDiagnostics.missingElements.push(`${qn} @${ctx.baseURI||''}`); return null;
+    diagMissing('Element', qn, ctx); return null;
   }
   function resolveType(ctx, qn){
     const {ns,local,pref}=splitQNameEx(ctx, qn);
@@ -830,10 +892,21 @@ function buildXsdRepo(items){
     const tail=tailOfNS(ns); if(tail && nsTailIndex.has(tail)){ key=keyQL(nsTailIndex.get(tail),local); if(types.has(key)) return types.get(key); }
     const base=guessBasenameFromPrefix(pref); if(base && basenameNsMap.has(base)){ key=keyQL(basenameNsMap.get(base),local); if(types.has(key)) return types.get(key); }
     const list=byLocalTypes.get(local)||[]; if(list.length===1) return list[0];
-    buildDiagnostics.missingTypes.push(`${qn} @${ctx.baseURI||''}`); return null;
+    diagMissing('Type', qn, ctx); return null;
+  }
+  // NEW: резолв xs:group
+  function resolveGroup(ctx, qn){
+    const {ns,local,pref}=splitQNameEx(ctx, qn);
+    let key=keyQL(ns,local); if(groups.has(key)) return groups.get(key);
+    const tail=tailOfNS(ns); if(tail && nsTailIndex.has(tail)){ key=keyQL(nsTailIndex.get(tail),local); if(groups.has(key)) return groups.get(key); }
+    const base=guessBasenameFromPrefix(pref); if(base && basenameNsMap.has(base)){ key=keyQL(basenameNsMap.get(base),local); if(groups.has(key)) return groups.get(key); }
+    const list=byLocalGroups.get(local)||[]; if(list.length===1) return list[0];
+    diagMissing('Group', qn, ctx); return null;
   }
 
-  return {docs,elements,types,byLocalElements,byLocalTypes,XS_NS,baseIndex,unresolvedImports,basenameNsMap,nsTailIndex,resolveElement,resolveType};
+  buildDiagnostics.unresolvedImports = unresolvedImports.slice();
+
+  return {docs,elements,types,groups,byLocalElements,byLocalTypes,byLocalGroups,globalElementsList,XS_NS,baseIndex,unresolvedImports,basenameNsMap,nsTailIndex,resolveElement,resolveType,resolveGroup};
 }
 
 /* ========= Выбор корня ========= */
@@ -846,6 +919,80 @@ function pickRootElement(repo){
   return repo.elements.values().next().value || null;
 }
 
+// NEW: общая сборка дерева по выбранному корню без изменения фильтров
+function rebuildModelWithRoot(rootElem, {resetExpand=true}={}){
+  if(!rootElem || !state.repo) return;
+  const rootNode = buildModelFromElement(state.repo, rootElem);
+  annotateIdsPathsAndBranch(rootNode);
+  inferTypicalGroupContainers(rootNode);
+  annotateRequiredness(rootNode);
+
+  state.modelRoot = rootNode;
+  if(state.slice.method==='code') state.slicePendingReapply = true;
+
+  if(resetExpand){
+    state.expanded.clear();
+    state.expanded.add(state.modelRoot._id);
+    state.expandLevel = state.expandLevel || localStorage.getItem(LS_LEVEL) || 'all';
+    autoExpandToLevel();
+    if(state.slice.method==='code'){
+      const anchor = sliceAnchorFromState();
+      if(anchor){
+        const expanded = ensureAnchorPathExpanded(anchor);
+        if(expanded){ saveState(); }
+      }
+    }
+  }
+
+  refreshStatsFromRepo(state.repo, rootNode);
+  renderModel();
+}
+
+// NEW: фабрика плейсхолдеров для неразрешённых ссылок
+function buildPlaceholderNode({nameEN,qname,depth,minOccurs,maxOccurs,parentParticle,parentMin,flag}){
+  const node={
+    nameRU: prettifyName(nameEN||'Unresolved'),
+    nameEN: nameEN||'unresolved',
+    qname: qname||nameEN||'',
+    type:'',
+    minOccurs: intOr(minOccurs,1),
+    maxOccurs: maxOccurs || 1,
+    level: depth,
+    signable:true,
+    service:false,
+    annotation:false,
+    documentation:false,
+    hasAssert:false,
+    _parentParticle:parentParticle,
+    _parentMin:parentMin,
+    children:[]
+  };
+  node[flag]=true;
+  markTypicalAndCommonFlags(node);
+  markServiceFlags(node);
+  return node;
+}
+
+// NEW: заполнение списка глобальных элементов для выбора корня
+function populateRootSelector(repo, selectedKey){
+  if(!els.rootSelector) return;
+  els.rootSelector.innerHTML='';
+  if(!repo){ els.rootSelector.disabled=true; return; }
+  const frag=document.createDocumentFragment();
+  for(const rec of repo.globalElementsList||[]){
+    const opt=ce('option');
+    const key=keyQL(rec.ns, rec.name);
+    opt.value=key;
+    const labelQName = makeQName(rec.doc.doc, rec.ns||'', rec.name||'element');
+    const origin = rec.doc?.name ? ` (${rec.doc.name})` : '';
+    opt.textContent = `${labelQName}${origin}`;
+    if(key===selectedKey) opt.selected=true;
+    frag.appendChild(opt);
+  }
+  els.rootSelector.appendChild(frag);
+  els.rootSelector.disabled = !(repo.globalElementsList||[]).length;
+}
+
 /* ========= Построение модели ========= */
 function buildModelFromElement(repo, elRef, depth=0){
   const el=elRef.node, tns=elRef.ns||'';
@@ -854,9 +1001,10 @@ function buildModelFromElement(repo, elRef, depth=0){
 
   const ruFromEl = readHumanLabel(el);
   let ruFromType='';
+  let unresolvedType=null;
   if(typeAttr){
     const t=repo.resolveType(el, typeAttr);
-    if(t){ ruFromType = readHumanLabel(t.node); }
+    if(t){ ruFromType = readHumanLabel(t.node); } else { unresolvedType=typeAttr; }
   }
 
   const nameEN = el.getAttribute('name') || 'element';
@@ -879,16 +1027,16 @@ function buildModelFromElement(repo, elRef, depth=0){
   const localCT = findChild(el, repo.XS_NS,'complexType');
   if(localCT){
     node.type = typeAttr ? resolveQNameStr(el, typeAttr) : makeQName(el.ownerDocument, tns, nameEN+'Type');
-    node.children = expandComplexType(state.repo, el.ownerDocument, localCT, depth+1);
+    node.children = expandComplexType(repo, el.ownerDocument, localCT, depth+1);
     if(!node.hasAssert){ node.hasAssert = !!localCT.getElementsByTagNameNS(repo.XS_NS,'assert').length; }
   }else if(typeAttr){
-    const t = state.repo.resolveType(el, typeAttr);
+    const t = repo.resolveType(el, typeAttr);
     if(t){
       node.annotation = node.annotation || !!findChild(t.node, repo.XS_NS,'annotation');
       node.documentation = node.documentation || !!t.node.getElementsByTagNameNS(repo.XS_NS,'documentation').length;
       node.hasAssert = node.hasAssert || !!t.node.getElementsByTagNameNS(repo.XS_NS,'assert').length;
-      node.children = expandComplexType(state.repo, t.doc.doc, t.node, depth+1);
-    }
+      node.children = expandComplexType(repo, t.doc.doc, t.node, depth+1);
+    }else{ node._unresolvedType = unresolvedType || typeAttr; }
   }
 
   markTypicalAndCommonFlags(node);
@@ -903,7 +1051,15 @@ function expandComplexType(repo, doc, ctNode, depth){
     if(ext){
       const base=ext.getAttribute('base');
       ['sequence','all','choice'].forEach(k=>{ const p=findChild(ext, XS,k); if(p) kids.push(...expandParticle(repo, doc, p, depth, k, intOr(p.getAttribute('minOccurs'),1))); });
-      if(base){ const bt=repo.resolveType(ext, base); if(bt) kids.push(...expandComplexType(repo, bt.doc.doc, bt.node, depth)); }
+      // MOD: фиксируем отсутствие базового типа, не теряя ветку
+      if(base){
+        const bt=repo.resolveType(ext, base);
+        if(bt){
+          kids.push(...expandComplexType(repo, bt.doc.doc, bt.node, depth));
+        }else{
+          kids.push(buildPlaceholderNode({nameEN:`unresolvedBase:${base}`, qname: resolveQNameStr(ext, base), depth, minOccurs:1, maxOccurs:1, parentParticle:'extension', parentMin:1, flag:'_unresolvedType'}));
+        }
+      }
       return kids;
     }
   }
@@ -919,7 +1075,8 @@ function expandParticle(repo, doc, particle, depth, ctx='sequence', ctxMin=1){
     if(ln==='element'){
       const tns=targetNsOf(doc);
       if(el.getAttribute('ref')){
-        const refEl=repo.resolveElement(el, el.getAttribute('ref'));
+        const refQName = el.getAttribute('ref');
+        const refEl=repo.resolveElement(el, refQName);
         if(refEl){
           const child=buildModelFromElement(repo, refEl, depth);
           child.minOccurs=intOr(el.getAttribute('minOccurs'), child.minOccurs);
@@ -929,6 +1086,19 @@ function expandParticle(repo, doc, particle, depth, ctx='sequence', ctxMin=1){
           child.documentation=child.documentation || !!el.getElementsByTagNameNS(repo.XS_NS,'documentation').length;
           child._parentParticle=ctx; child._parentMin=ctxMin;
           out.push(child);
+        }else{
+          // MOD: сохраняем ветку для неразрешённого ref
+          const unresolved = buildPlaceholderNode({
+            nameEN: splitQNameEx(el, refQName).local || refQName,
+            qname: resolveQNameStr(el, refQName),
+            depth,
+            minOccurs:intOr(el.getAttribute('minOccurs'),1),
+            maxOccurs: el.getAttribute('maxOccurs') || 1,
+            parentParticle:ctx,
+            parentMin:ctxMin,
+            flag:'_unresolvedElementRef'
+          });
+          out.push(unresolved);
         }
         continue;
       }
@@ -968,8 +1138,30 @@ function expandParticle(repo, doc, particle, depth, ctx='sequence', ctxMin=1){
     }else if(ln==='choice' || ln==='sequence' || ln==='all'){
       out.push(...expandParticle(repo, doc, el, depth, ln, intOr(el.getAttribute('minOccurs'),1)));
     }else if(ln==='group'){
+      // NEW: полноценная обработка xs:group через resolveGroup
       const ref=el.getAttribute('ref');
-      if(ref){ const t=repo.resolveType(el, ref); if(t) out.push(...expandComplexType(repo, t.doc.doc, t.node, depth)); }
+      if(ref){
+        const g=repo.resolveGroup(el, ref);
+        if(g){
+          const inner = findChild(g.node, XS,'sequence') || findChild(g.node, XS,'choice') || findChild(g.node, XS,'all');
+          if(inner){ out.push(...expandParticle(repo, g.doc.doc, inner, depth, ln, intOr(el.getAttribute('minOccurs'),1))); }
+        }else{
+          const unresolved = buildPlaceholderNode({
+            nameEN:`group:${splitQNameEx(el, ref).local || ref}`,
+            qname: resolveQNameStr(el, ref),
+            depth,
+            minOccurs:intOr(el.getAttribute('minOccurs'),1),
+            maxOccurs:el.getAttribute('maxOccurs')||1,
+            parentParticle:ctx,
+            parentMin:ctxMin,
+            flag:'_unresolvedGroup'
+          });
+          out.push(unresolved);
+        }
+      }else{
+        const inline = findChild(el, XS,'sequence') || findChild(el, XS,'choice') || findChild(el, XS,'all');
+        if(inline){ out.push(...expandParticle(repo, doc, inline, depth, ln, intOr(el.getAttribute('minOccurs'),1))); }
+      }
     }
   }
   return out;
@@ -1756,16 +1948,31 @@ q('#reportBtn').addEventListener('click', ()=>{
   if(!state.repo){
     body.innerHTML=`<p class="hint">Загрузите XSD, чтобы сформировать отчёт.</p>`;
   }else{
+    // NEW: расширенный отчёт о резолвинге
     const files=(state.repo.docs||[]).map(d=>d.name);
     const model=filteredTree();
     const stats=model? computeStats(model) : {total:0,maxDepth:0};
     const unresolved=state.repo.unresolvedImports||[];
+    const missingTypes = buildDiagnostics.missingTypesDetailed||[];
+    const missingElems = buildDiagnostics.missingElementsDetailed||[];
+    const missingGroups = buildDiagnostics.missingGroupsDetailed||[];
     const sliceActive=isSliceActive();
     const anchorMethod=sliceActive ? 'code' : '—';
     const anchorCode =sliceActive ? (state.slice?.anchorCode || '—') : '—';
     const anchorQName=sliceActive ? (state.slice?.anchorQName || '—') : '—';
     const anchorPath =sliceActive ? (state.slice?.anchorPath || '—') : '—';
     const overridesCount = state.filterOverrides.size;
+    const diagList = [];
+    const renderDiag = (title, list) => list.length ? `<li><b>${title} (${list.length})</b><ul>${list.map(it=>`<li><code>${escapeHtml(it.qname||'')}</code> ↔ ${escapeHtml(it.referer||'—')} (${escapeHtml(it.fromFile||'')})</li>`).join('')}</ul></li>` : '';
+    diagList.push(renderDiag('Неразрешённые type', missingTypes));
+    diagList.push(renderDiag('Неразрешённые element/ref', missingElems));
+    diagList.push(renderDiag('Неразрешённые group', missingGroups));
+    const importsHtml = unresolved.length ? `<li><b>Импорты/инклюды (${unresolved.length})</b><ul>${unresolved.map(im=>`<li>${escapeHtml(im.from)} → ${escapeHtml(im.href||'')}${im.ns?` [${escapeHtml(im.ns)}]`:''}</li>`).join('')}</ul></li>` : '';
+    const diagHtml = (diagList.some(Boolean) || unresolved.length) ? `
+      <div class="diag-report">
+        <div class="hint">Диагностика резолвинга</div>
+        <ul>${diagList.filter(Boolean).join('')}${importsHtml}</ul>
+      </div>` : `<div class="diag-report"><div class="hint">Диагностика резолвинга: без проблем</div></div>`;
 
     body.innerHTML = `
       <table>
@@ -1779,6 +1986,7 @@ q('#reportBtn').addEventListener('click', ()=>{
         <tr><th>XML-ID / Бизнес-ID</th><td>id(xml): ${buildDiagnostics.idXmlCount}; id(business): ${buildDiagnostics.idBusinessCount}</td></tr>
         <tr><th>Локальные переопр. фильтра</th><td>${overridesCount}</td></tr>
       </table>
+      ${diagHtml}
     `;
   }
   q('#reportDlg').showModal();
